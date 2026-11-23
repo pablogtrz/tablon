@@ -1,0 +1,72 @@
+<script lang="ts">
+  import { renderMarkdown } from '$lib/markdown'
+  import { cn } from '$lib/utils'
+
+  let {
+    source,
+    interactive = false,
+    disabled = false,
+    ontasktoggle,
+    class: className,
+  }: {
+    source: string
+    interactive?: boolean
+    disabled?: boolean
+    ontasktoggle?: (index: number, checked: boolean) => void
+    class?: string
+  } = $props()
+
+  let container = $state<HTMLDivElement>()
+
+  $effect(() => {
+    if (!container) return
+    const focusedTask = focusedTaskIndex()
+    container.replaceChildren(renderMarkdown(source))
+    syncCheckboxes()
+    restoreTaskFocus(focusedTask)
+  })
+
+  $effect(() => {
+    if (container) syncCheckboxes()
+  })
+
+  function focusedTaskIndex(): number | null {
+    if (!container) return null
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement) || !container.contains(active)) return null
+    const input = active.closest('input[type="checkbox"]') as HTMLInputElement | null
+    const raw = input?.dataset.taskIndex
+    return raw === undefined ? null : Number(raw)
+  }
+
+  function restoreTaskFocus(index: number | null) {
+    if (!container || index === null || Number.isNaN(index)) return
+    const next = container.querySelector<HTMLInputElement>(`input[data-task-index="${index}"]`)
+    next?.focus()
+  }
+
+  function syncCheckboxes() {
+    if (!container) return
+    for (const input of container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+      input.disabled = disabled || !interactive
+    }
+  }
+
+  function handleClick(event: MouseEvent) {
+    if (!interactive || disabled || !ontasktoggle) return
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const input = target.closest('input[type="checkbox"]') as HTMLInputElement | null
+    if (!input) return
+    const raw = input.dataset.taskIndex
+    if (raw === undefined) return
+    const index = Number(raw)
+    if (Number.isNaN(index)) return
+    event.preventDefault()
+    ontasktoggle(index, input.checked)
+  }
+</script>
+
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={container} class={cn('markdown-body', className)} onclick={handleClick}></div>
