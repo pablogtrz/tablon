@@ -1,0 +1,43 @@
+# Local agent config
+.opencode/
+.agents/
+skills-lock.json
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Go
+/bin/
+/dist/
+*.test
+*.out
+coverage.out
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+pnpm-debug.log*
+
+opencode.json
+skills-lock.json

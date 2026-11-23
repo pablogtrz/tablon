@@ -1,0 +1,129 @@
+# Tablon design system
+
+Dark-only v0.1. Svelte 5 + TypeScript + Vite + Tailwind CSS v4 + shadcn-svelte.
+
+Tokens and base styles live in `frontend/src/app.css`. This file explains how to use them. Change both together.
+
+## Where things live
+
+| Path | Purpose |
+|---|---|
+| `frontend/src/app.css` | Tokens, shadcn bridge, base styles, glass/focus utilities. |
+| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IdChip, AgentChip. |
+| `frontend/src/lib/components/ui/` | shadcn-svelte components, added on demand. |
+| `frontend/src/lib/utils.ts` | `cn()` helper. |
+| `frontend/src/lib/types.ts` | Status/priority unions, labels and tones. |
+| `frontend/src/lib/meta.ts` | Status/priority icons, tones and select options. |
+| `frontend/src/lib/markdown.ts` | Markdown render, sanitization and task toggling. |
+| `frontend/components.json` | shadcn-svelte config. |
+
+Do not create a parallel style folder.
+
+## Rules
+
+1. Accent is `#FFA443`. Use it only for brand, primary actions, active indices/icons, focus and progress. Never for workflow status.
+2. No left color accent bars. Active nav uses a neutral surface + amber index/icon.
+3. Glass only on large surfaces: app shell, sheets, project cards, dialogs, toasts. Chips and badges are flat.
+4. Issue status is a tinted status cell with icon + label. Priority is a neutral icon + label badge. No colored borders, glows or tinted text.
+5. Canonical issue statuses: Backlog, Todo, In Progress, In Review, Done, Canceled. API slugs: `backlog`, `todo`, `in-progress`, `in-review`, `done`, `canceled`.
+6. Epic statuses: Backlog, In Progress, Done. API slugs: `backlog`, `in-progress`, `done`.
+7. Project statuses: Planning, Active, Archived, Done. Tones: Planning `--status-backlog`, Active `--status-progress`, Done `--status-done`, Archived `--text-3`.
+8. Done is green. Amber is brand/action. Cyan is agent. Red is only Urgent, destructive actions and errors.
+9. Fewer elements per screen. No stat strips or activity feeds in the main shell.
+10. Dark only. No light theme in v0.1.
+11. No React, Radix, dnd-kit, TanStack, date-fns or similar in the Svelte app.
+12. Use `Select.svelte` for status/priority controls. It relies on native `appearance: base-select` with a plain native fallback.
+13. Issue descriptions render Markdown through `MarkdownRenderer`. External images are https-only; GFM tables and task lists are supported; raw HTML is stripped.
+14. Icons use Lucide via `@lucide/svelte`, imported per icon. Primary actions carry icon + label; compact secondary actions are icon-only with an accessible name.
+15. Interactive controls use `cursor: pointer`; disabled controls use `cursor: not-allowed`.
+
+## Color
+
+- Canvas: `--bg`, elevated `--bg-2`, surfaces `--surface-1/2/3`, borders `--border` / `--border-strong`, text `--text` / `--text-2` / `--text-3`.
+- Brand: `--brand`, `--brand-hover`, `--brand-active`, `--brand-contrast`, `--brand-soft`, `--brand-line`, `--ring`.
+- Semantic: `--status-*`, `--status-*-soft`, `--priority-*`, `--agent`, `--danger`. Values live in `app.css`.
+- `--accent` in shadcn is a hover surface, not the brand. Use `--brand` / `bg-primary`.
+- Body text ≥ 4.5:1 on its surface. Amber fills use dark ink.
+
+## Type
+
+- Inter Variable, 14px base, line-height 1.55.
+- Three sizes per view maximum. Weight before size.
+- Sentence case for titles, labels and buttons. No all-caps labels.
+- Mono only for IDs, branches, URLs, CLI and tabular data.
+- Lucide outline icons, 1.6px stroke, when a component needs icons.
+
+## Space, shape, glass
+
+- 4px spacing base. Controls 36px; small 30px; large 42px; mobile target 40px.
+- Radii: 6 / 8 / 10 / 12 / 16 / 20 / 28 / full. Controls 8-10, cards 12-20, dialogs 16.
+- Glass: white 6.5% → 2.2%, 1px border, `blur(20px) saturate(140%)`, inset top highlight.
+- Blur only on large surfaces. Cap at two blurred layers per screen; never blur scrolling lists.
+- Ambient: near-black base + amber glow top-right + cool slate glow left + grain. Fixed decoration.
+- Project logo: curated gradient tile by default; emoji overrides it. The eight pairs live in `app.css` in this order: amber, blue, violet, green, cyan, yellow, slate, indigo. Do not invent per-project pairs.
+
+## Layout
+
+- Desktop sidebar 248px; tablet rail 64px; mobile off-canvas drawer. Content max 1360px.
+- Sidebar: brand, search, workspace views, projects, settings. Keep agent/idle detail out of the default sidebar.
+- Top bar: breadcrumb, one live/SSE state, one primary action (`New issue`).
+- Project header: logo, title, status icon + label, one quiet meta line. Issue lists lead with ID, tinted status cell, priority badge, then title.
+- Board: three columns, two cards per column in mocks, counts in headers. Cards show ID, title, priority and one owner/category at most.
+- Mobile: board snaps horizontally; tables stack; drawer nav.
+
+## Components
+
+- Buttons: primary amber fill + dark ink; secondary flat + border; ghost text; danger red tint. One primary action per view. Loading keeps its label. Icon + label for primary actions; icon-only secondary actions need `aria-label`.
+- Inputs: 36px, 10px radius, `surface-1`, visible labels, amber focus ring.
+- Status/priority: use `StatusCell`, `PriorityBadge`, `ProjectStatusBadge`, `EpicStatusBadge`. Use `Select` for status/priority controls. Do not recreate their CSS inline.
+- Cards: glass only for large items. Project card: logo, name, ID, status icon + label, progress bar, counts, updated time.
+- Markdown: `MarkdownRenderer` for read mode and preview; `MarkdownEditor` for editing. Task checkboxes toggle the source; https images, tables and task lists are allowed; malformed HTML is sanitized.
+- Native dialog: `<dialog>` with `showModal()`, accessible name, `closedby="any"`, `<form method="dialog">`. No manual focus trap or Esc handler. Visible close button. Entry motion uses `@starting-style`, `transition-behavior: allow-discrete` and `overlay`.
+- Tables: region + `tabindex="0"` + caption; sticky header on desktop; stacked labeled cards below 640px.
+- Toasts: bottom-right, polite live region, keyboard-focusable close, pause on hover/focus.
+- Skeletons: match final layout; shimmer only when reduced motion is not requested.
+
+## Motion
+
+- Durations: 120 / 180 / 240 / 320ms. Standard `cubic-bezier(.2,.8,.2,1)`, enter `cubic-bezier(.16,1,.3,1)`.
+- Animate opacity and transform only. No decorative loops or scroll-jacking.
+- Route content enters with a 6px/180ms fade-slide; tabs use a 120ms fade; dialogs, drawers and select pickers use top-layer entry motion.
+- After route changes, scroll to the top and focus the new page heading/region.
+- Reduced motion: remove spatial transforms, shorten fades, keep color transitions. Never apply a global `animation-duration: .01ms` reset.
+
+## Accessibility
+
+- Focus-visible: amber ring, 2px offset, always visible.
+- Status and priority: icon or glyph plus label; never color alone. Status cells add a tinted background; priority badges stay neutral.
+- 40px mobile targets (24px minimum for secondary dismiss controls); 8px between actions.
+- Native dialog handles focus, Esc and return-to-invoker.
+- Tables and Markdown tables expose a region, caption/label and keyboard scrolling.
+- Custom selects use the native select keyboard contract; unsupported browsers get the native picker.
+- SSE updates use a polite live region.
+
+## Svelte 5
+
+- Use `$props()`, `$state()`, `$derived()`, `$effect()`. No stores for local component state.
+- `$lib` is aliased in `vite.config.ts` and `tsconfig.app.json`.
+- Keep classes static for Tailwind scanning; use `cn()` for variants.
+- Custom primitives live in `$lib/components/tablon`; generic UI in `$lib/components/ui`.
+
+## Review checklist
+
+- [ ] Accent is `#FFA443`; no ad-hoc UI colors, gradients or shadows (project logo gradients use the approved palette).
+- [ ] No left color accent bar.
+- [ ] Glass only on large surfaces; chips and badges flat.
+- [ ] Issue status uses a tinted status cell with icon + label; priority uses a neutral icon + label badge.
+- [ ] Status/priority selects use `Select` and keep visible labels.
+- [ ] Markdown descriptions sanitize HTML, allow https images, and support tables and task lists.
+- [ ] Route entry/top-layer motion respects reduced motion and focus moves to the new heading.
+- [ ] One primary action per view; fewer elements than the last pass.
+- [ ] 360, 390 and 768px checked; no horizontal overflow.
+- [ ] Tables stack below 640px; dialogs use native `<dialog>`.
+- [ ] Focus, labels, keyboard path and reduced motion checked.
+- [ ] UI text uses canonical labels and sentence case.
+- [ ] Interactive controls show pointer cursor; disabled controls show not-allowed.
+
+## Changing the system
+
+Change `frontend/src/app.css` and this file together. A new value without a token and a documented rule is a regression.
