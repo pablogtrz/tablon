@@ -3,6 +3,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { defineConfig } from 'vite'
 
+const apiProxy = process.env.TABLON_PROXY_URL ?? 'http://127.0.0.1:8080'
+
 export default defineConfig({
   plugins: [tailwindcss(), svelte()],
   resolve: {
@@ -12,9 +14,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8080',
-      '/health': 'http://127.0.0.1:8080',
-      '/ready': 'http://127.0.0.1:8080',
+      '/api': apiProxy,
+      '/health': apiProxy,
+      '/ready': apiProxy,
     },
   },
 })
