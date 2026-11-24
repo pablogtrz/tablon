@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,16 @@ func TestOpenAPIContract(t *testing.T) {
 			}
 			if op.Responses == nil || op.Responses.Len() == 0 {
 				t.Errorf("%s %s has no responses", method, path)
+			}
+			hasSuccess := false
+			for code := range op.Responses.Map() {
+				if strings.HasPrefix(code, "2") {
+					hasSuccess = true
+					break
+				}
+			}
+			if !hasSuccess {
+				t.Errorf("%s %s has no success response", method, path)
 			}
 		}
 	}
@@ -231,5 +242,28 @@ func TestOpenAPIContract(t *testing.T) {
 	}
 	if err := spec.Components.Schemas["Error"].Value.VisitJSON(errorValue); err != nil {
 		t.Fatalf("401 body does not match Error schema: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("new validation request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/json")
+	res, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("validation request: %v", err)
+	}
+	validationBody, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("validation status = %d: %s", res.StatusCode, validationBody)
+	}
+	var validationValue any
+	if err := json.Unmarshal(validationBody, &validationValue); err != nil {
+		t.Fatalf("decode validation error: %v", err)
+	}
+	if err := spec.Components.Schemas["Error"].Value.VisitJSON(validationValue); err != nil {
+		t.Fatalf("422 body does not match Error schema: %v", err)
 	}
 }

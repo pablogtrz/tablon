@@ -2,10 +2,80 @@ package config
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	old, ok := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if ok {
+			_ = os.Setenv(key, old)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+}
+
+func TestLoadDefaults(t *testing.T) {
+	for _, key := range []string{
+		"TABLON_HOST", "TABLON_PORT", "TABLON_DATA_DIR", "TABLON_API_TOKEN",
+		"TABLON_LOG_LEVEL", "TABLON_IDLE_ENABLED", "TABLON_IDLE_TIMEOUT",
+	} {
+		unsetenv(t, key)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Host != "127.0.0.1" || cfg.Port != 8448 {
+		t.Fatalf("unexpected address: %s:%d", cfg.Host, cfg.Port)
+	}
+	if cfg.DataDir != "./data" {
+		t.Fatalf("data dir = %q", cfg.DataDir)
+	}
+	if cfg.APIToken != "" {
+		t.Fatalf("token = %q", cfg.APIToken)
+	}
+	if cfg.LogLevel != slog.LevelInfo {
+		t.Fatalf("log level = %v", cfg.LogLevel)
+	}
+	if !cfg.IdleEnabled {
+		t.Fatal("idle should be enabled by default")
+	}
+	if cfg.IdleTimeout != 5*time.Minute {
+		t.Fatalf("idle timeout = %v", cfg.IdleTimeout)
+	}
+}
+
+func TestLoadIdleDisabled(t *testing.T) {
+	for _, key := range []string{
+		"TABLON_HOST", "TABLON_PORT", "TABLON_DATA_DIR", "TABLON_API_TOKEN",
+		"TABLON_LOG_LEVEL",
+	} {
+		unsetenv(t, key)
+	}
+	t.Setenv("TABLON_IDLE_ENABLED", "false")
+	t.Setenv("TABLON_IDLE_TIMEOUT", "90s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.IdleEnabled {
+		t.Fatal("idle should be disabled")
+	}
+	if cfg.IdleTimeout != 90*time.Second {
+		t.Fatalf("idle timeout = %v", cfg.IdleTimeout)
+	}
+}
 
 func TestLoad(t *testing.T) {
 	t.Setenv("TABLON_HOST", "127.0.0.1")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pablogtrz/tablon/internal/idle"
+	"github.com/pablogtrz/tablon/internal/version"
 )
 
 type statusResponse struct {
@@ -158,6 +159,27 @@ func TestOpenSSEKeepsActive(t *testing.T) {
 
 	res.Body.Close()
 	waitForIdleState(t, a, nil, "idle")
+}
+
+func TestStatusVersionInjected(t *testing.T) {
+	old := version.Version
+	t.Cleanup(func() { version.Version = old })
+	version.Version = "9.9.9"
+
+	a := newTestAPI(t, "")
+	code, body := a.do(t, http.MethodGet, "/api/v1/system/status", nil, nil)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d: %s", code, body)
+	}
+	var status struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(body, &status); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if status.Version != "9.9.9" {
+		t.Fatalf("version = %q", status.Version)
+	}
 }
 
 func TestStatusJSONShape(t *testing.T) {
