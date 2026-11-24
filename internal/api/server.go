@@ -8,20 +8,23 @@ import (
 	"time"
 
 	"github.com/pablogtrz/tablon/internal/config"
+	"github.com/pablogtrz/tablon/internal/events"
 	"github.com/pablogtrz/tablon/internal/service"
 )
 
 type Server struct {
 	cfg    config.Config
 	svc    *service.Service
+	hub    *events.Hub
 	logger *slog.Logger
 	mux    *http.ServeMux
 }
 
-func New(cfg config.Config, svc *service.Service, logger *slog.Logger) http.Handler {
+func New(cfg config.Config, svc *service.Service, hub *events.Hub, logger *slog.Logger) http.Handler {
 	s := &Server{
 		cfg:    cfg,
 		svc:    svc,
+		hub:    hub,
 		logger: logger,
 		mux:    http.NewServeMux(),
 	}
@@ -54,6 +57,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/v1/issues/{issueRef}/status", s.updateIssueStatus)
 	s.mux.HandleFunc("POST /api/v1/issues/{issueRef}/claim", s.claimIssue)
 	s.mux.HandleFunc("POST /api/v1/issues/{issueRef}/release", s.releaseIssue)
+
+	s.mux.HandleFunc("GET /api/v1/projects/{projectRef}/events", s.projectEvents)
+
+	s.mux.HandleFunc("GET /api/v1/issues/{issueRef}/comments", s.listComments)
+	s.mux.HandleFunc("POST /api/v1/issues/{issueRef}/comments", s.createComment)
+	s.mux.HandleFunc("PATCH /api/v1/comments/{commentRef}", s.updateComment)
+	s.mux.HandleFunc("DELETE /api/v1/comments/{commentRef}", s.deleteComment)
 }
 
 func (s *Server) auth(next http.Handler) http.Handler {
@@ -119,4 +129,14 @@ func (r *responseRecorder) Write(body []byte) (int, error) {
 		r.status = http.StatusOK
 	}
 	return r.ResponseWriter.Write(body)
+}
+
+func (r *responseRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }

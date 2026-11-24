@@ -14,23 +14,43 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/pablogtrz/tablon/internal/domain"
+	"github.com/pablogtrz/tablon/internal/events"
 	"github.com/pablogtrz/tablon/internal/store"
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
-type Service struct {
-	store *store.Store
-	now   func() time.Time
-	newID func() string
+type Publisher interface {
+	Publish(event events.Event)
 }
 
-func New(st *store.Store) *Service {
-	return &Service{
+type Service struct {
+	store     *store.Store
+	publisher Publisher
+	now       func() time.Time
+	newID     func() string
+}
+
+func New(st *store.Store, publishers ...Publisher) *Service {
+	s := &Service{
 		store: st,
 		now:   time.Now,
 		newID: func() string { return uuid.Must(uuid.NewV7()).String() },
 	}
+	if len(publishers) > 0 {
+		s.publisher = publishers[0]
+	}
+	return s
+}
+
+func (s *Service) publish(event events.Event) {
+	if s.publisher != nil {
+		s.publisher.Publish(event)
+	}
+}
+
+func eventTime(t time.Time) string {
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 func (s *Service) Ready(ctx context.Context) error {
@@ -298,38 +318,52 @@ type UpdateIssueInput struct {
 }
 
 func (s *Service) CreateIssue(ctx context.Context, projectRef string, in CreateIssueInput) (domain.Issue, error) {
+	issue, _, err := s.CreateIssueIdempotent(ctx, projectRef, in, "", "")
+	return issue, err
+}
+
+func (s *Service) CreateIssueIdempotent(
+	ctx context.Context,
+	projectRef string,
+	in CreateIssueInput,
+	idempotencyKey, requestHash string,
+) (domain.Issue, bool, error) {
+	key, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return domain.Issue{}, false, err
+	}
 	project, err := s.store.GetProject(ctx, projectRef)
 	if err != nil {
-		return domain.Issue{}, err
+		return domain.Issue{}, false, err
 	}
 	if err := validText("title", in.Title, 1, 200); err != nil {
-		return domain.Issue{}, err
+		return domain.Issue{}, false, err
 	}
 	if err := validText("description", in.Description, 0, 20000); err != nil {
-		return domain.Issue{}, err
+		return domain.Issue{}, false, err
 	}
 	status := domain.IssueStatus(strings.TrimSpace(in.Status))
 	if status == "" {
 		status = domain.IssueBacklog
 	}
 	if !status.Valid() {
-		return domain.Issue{}, domain.Invalid("status", "is not a valid issue status")
+		return domain.Issue{}, false, domain.Invalid("status", "is not a valid issue status")
 	}
 	priority := domain.Priority(strings.TrimSpace(in.Priority))
 	if priority == "" {
 		priority = domain.PriorityNone
 	}
 	if !priority.Valid() {
-		return domain.Issue{}, domain.Invalid("priority", "must be urgent, high, medium, low or none")
+		return domain.Issue{}, false, domain.Invalid("priority", "must be urgent, high, medium, low or none")
 	}
 
 	epicID, err := s.validateEpic(ctx, project.ID, in.EpicID)
 	if err != nil {
-		return domain.Issue{}, err
+		return domain.Issue{}, false, err
 	}
 	agentID, err := validAgent(in.AgentID)
 	if err != nil {
-		return domain.Issue{}, err
+		return domain.Issue{}, false, err
 	}
 
 	now := s.now().UTC()
@@ -345,7 +379,26 @@ func (s *Service) CreateIssue(ctx context.Context, projectRef string, in CreateI
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	return s.store.CreateIssue(ctx, i)
+	var created domain.Issue
+	var replayed bool
+	if key == "" {
+		created, err = s.store.CreateIssue(ctx, i)
+	} else {
+		created, replayed, err = s.store.CreateIssueIdempotent(ctx, i, key, requestHash)
+	}
+	if err != nil {
+		return domain.Issue{}, false, err
+	}
+	if !replayed {
+		s.publish(events.Event{
+			Type:       "issue.created",
+			ProjectID:  created.ProjectID,
+			IssueID:    created.ID,
+			Identifier: created.Identifier,
+			UpdatedAt:  eventTime(created.UpdatedAt),
+		})
+	}
+	return created, replayed, nil
 }
 
 func (s *Service) ListIssues(ctx context.Context, projectRef string, q domain.IssueQuery) (domain.Page[domain.Issue], error) {
@@ -428,6 +481,13 @@ func (s *Service) UpdateIssue(ctx context.Context, ref string, in UpdateIssueInp
 	if err := s.store.UpdateIssue(ctx, i); err != nil {
 		return domain.Issue{}, err
 	}
+	s.publish(events.Event{
+		Type:       "issue.updated",
+		ProjectID:  i.ProjectID,
+		IssueID:    i.ID,
+		Identifier: i.Identifier,
+		UpdatedAt:  eventTime(i.UpdatedAt),
+	})
 	return i, nil
 }
 
@@ -436,7 +496,185 @@ func (s *Service) UpdateIssueStatus(ctx context.Context, ref, status string) (do
 }
 
 func (s *Service) DeleteIssue(ctx context.Context, ref string) error {
-	return s.store.DeleteIssue(ctx, ref)
+	issue, err := s.store.GetIssue(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if err := s.store.DeleteIssue(ctx, ref); err != nil {
+		return err
+	}
+	s.publish(events.Event{
+		Type:       "issue.deleted",
+		ProjectID:  issue.ProjectID,
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		UpdatedAt:  eventTime(s.now().UTC()),
+	})
+	return nil
+}
+
+type CreateCommentInput struct {
+	Content string
+	AgentID *string
+}
+
+type UpdateCommentInput struct {
+	Content *string
+}
+
+func (s *Service) ListComments(
+	ctx context.Context,
+	issueRef string,
+	limit int,
+	cursor string,
+) (domain.Page[domain.Comment], error) {
+	issue, err := s.store.GetIssue(ctx, issueRef)
+	if err != nil {
+		return domain.Page[domain.Comment]{}, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return s.store.ListComments(ctx, issue.ID, limit, cursor)
+}
+
+func (s *Service) CreateComment(
+	ctx context.Context,
+	issueRef string,
+	in CreateCommentInput,
+) (domain.Comment, error) {
+	comment, _, err := s.CreateCommentIdempotent(ctx, issueRef, in, "", "")
+	return comment, err
+}
+
+func (s *Service) CreateCommentIdempotent(
+	ctx context.Context,
+	issueRef string,
+	in CreateCommentInput,
+	idempotencyKey, requestHash string,
+) (domain.Comment, bool, error) {
+	key, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return domain.Comment{}, false, err
+	}
+	issue, err := s.store.GetIssue(ctx, issueRef)
+	if err != nil {
+		return domain.Comment{}, false, err
+	}
+	if err := validText("content", in.Content, 1, 20000); err != nil {
+		return domain.Comment{}, false, err
+	}
+	agentID, err := validAgent(in.AgentID)
+	if err != nil {
+		return domain.Comment{}, false, err
+	}
+
+	now := s.now().UTC()
+	c := domain.Comment{
+		ID:        s.newID(),
+		IssueID:   issue.ID,
+		Content:   in.Content,
+		AgentID:   agentID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	var created domain.Comment
+	var replayed bool
+	if key == "" {
+		created, err = s.store.CreateComment(ctx, c)
+	} else {
+		created, replayed, err = s.store.CreateCommentIdempotent(ctx, c, key, requestHash)
+	}
+	if err != nil {
+		return domain.Comment{}, false, err
+	}
+	if !replayed {
+		s.publish(events.Event{
+			Type:       "comment.created",
+			ProjectID:  issue.ProjectID,
+			IssueID:    issue.ID,
+			Identifier: issue.Identifier,
+			CommentID:  created.ID,
+			UpdatedAt:  eventTime(created.UpdatedAt),
+		})
+	}
+	return created, replayed, nil
+}
+
+func (s *Service) UpdateComment(
+	ctx context.Context,
+	ref string,
+	in UpdateCommentInput,
+) (domain.Comment, error) {
+	c, err := s.store.GetComment(ctx, ref)
+	if err != nil {
+		return domain.Comment{}, err
+	}
+	issue, err := s.store.GetIssue(ctx, c.IssueID)
+	if err != nil {
+		return domain.Comment{}, err
+	}
+	if in.Content != nil {
+		if err := validText("content", *in.Content, 1, 20000); err != nil {
+			return domain.Comment{}, err
+		}
+		c.Content = *in.Content
+	}
+	c.UpdatedAt = s.now().UTC()
+	if err := s.store.UpdateComment(ctx, c); err != nil {
+		return domain.Comment{}, err
+	}
+	s.publish(events.Event{
+		Type:       "comment.updated",
+		ProjectID:  issue.ProjectID,
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		CommentID:  c.ID,
+		UpdatedAt:  eventTime(c.UpdatedAt),
+	})
+	return c, nil
+}
+
+func (s *Service) DeleteComment(ctx context.Context, ref string) error {
+	c, err := s.store.GetComment(ctx, ref)
+	if err != nil {
+		return err
+	}
+	issue, err := s.store.GetIssue(ctx, c.IssueID)
+	if err != nil {
+		return err
+	}
+	if err := s.store.DeleteComment(ctx, ref); err != nil {
+		return err
+	}
+	s.publish(events.Event{
+		Type:       "comment.deleted",
+		ProjectID:  issue.ProjectID,
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		CommentID:  c.ID,
+		UpdatedAt:  eventTime(s.now().UTC()),
+	})
+	return nil
+}
+
+func normalizeIdempotencyKey(value string) (string, error) {
+	key := strings.TrimSpace(value)
+	if key == "" {
+		return "", nil
+	}
+	if utf8.RuneCountInString(key) > 128 {
+		return "", domain.Invalid("Idempotency-Key", "must be at most 128 characters")
+	}
+	for _, r := range key {
+		if r < 0x21 || r > 0x7e {
+			return "", domain.Invalid("Idempotency-Key", "must contain visible ASCII characters only")
+		}
+	}
+	return key, nil
 }
 
 func (s *Service) ClaimIssue(ctx context.Context, ref, agentID string) (domain.Issue, error) {
@@ -444,7 +682,18 @@ func (s *Service) ClaimIssue(ctx context.Context, ref, agentID string) (domain.I
 	if agentID == "" || utf8.RuneCountInString(agentID) > 100 {
 		return domain.Issue{}, domain.Invalid("agent_id", "must be 1-100 characters")
 	}
-	return s.store.ClaimIssue(ctx, ref, agentID, s.now().UTC())
+	issue, err := s.store.ClaimIssue(ctx, ref, agentID, s.now().UTC())
+	if err != nil {
+		return domain.Issue{}, err
+	}
+	s.publish(events.Event{
+		Type:       "issue.claimed",
+		ProjectID:  issue.ProjectID,
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		UpdatedAt:  eventTime(issue.UpdatedAt),
+	})
+	return issue, nil
 }
 
 func (s *Service) ReleaseIssue(ctx context.Context, ref, agentID string) (domain.Issue, error) {
@@ -452,7 +701,18 @@ func (s *Service) ReleaseIssue(ctx context.Context, ref, agentID string) (domain
 	if agentID == "" || utf8.RuneCountInString(agentID) > 100 {
 		return domain.Issue{}, domain.Invalid("agent_id", "must be 1-100 characters")
 	}
-	return s.store.ReleaseIssue(ctx, ref, agentID, s.now().UTC())
+	issue, err := s.store.ReleaseIssue(ctx, ref, agentID, s.now().UTC())
+	if err != nil {
+		return domain.Issue{}, err
+	}
+	s.publish(events.Event{
+		Type:       "issue.released",
+		ProjectID:  issue.ProjectID,
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		UpdatedAt:  eventTime(issue.UpdatedAt),
+	})
+	return issue, nil
 }
 
 func (s *Service) validateEpic(ctx context.Context, projectID string, epicID *string) (*string, error) {

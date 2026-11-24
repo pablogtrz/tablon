@@ -119,6 +119,15 @@ type Issue struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+type Comment struct {
+	ID        string    `json:"id"`
+	IssueID   string    `json:"issue_id"`
+	Content   string    `json:"content"`
+	AgentID   *string   `json:"agent_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type IssueQuery struct {
 	Status   string
 	Priority string

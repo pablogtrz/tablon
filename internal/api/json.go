@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,17 +79,29 @@ func handleError(w http.ResponseWriter, logger *slog.Logger, err error) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	_, err := decodeJSONWithBody(w, r, dst)
+	return err
+}
+
+// decodeJSONWithBody decodes the request and also returns the raw body so
+// callers can fingerprint it for Idempotency-Key handling.
+func decodeJSONWithBody(w http.ResponseWriter, r *http.Request, dst any) ([]byte, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	dec := json.NewDecoder(r.Body)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return err
+		return nil, err
 	}
 	var extra struct{}
 	if err := dec.Decode(&extra); err != io.EOF {
-		return fmt.Errorf("body must contain a single JSON object")
+		return nil, fmt.Errorf("body must contain a single JSON object")
 	}
-	return nil
+	return raw, nil
 }
 
 func writeDecodeError(w http.ResponseWriter, err error) {

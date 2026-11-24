@@ -216,9 +216,30 @@ func (s *Store) CreateIssue(ctx context.Context, i domain.Issue) (domain.Issue, 
 	}
 	defer tx.Rollback()
 
+	created, err := s.createIssueTx(ctx, tx, i)
+	if err != nil {
+		return domain.Issue{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Issue{}, err
+	}
+	return created, nil
+}
+
+func (s *Store) CreateIssueIdempotent(
+	ctx context.Context,
+	i domain.Issue,
+	key, requestHash string,
+) (domain.Issue, bool, error) {
+	return idempotent(ctx, s.db, key, requestHash, 201, func(tx *sql.Tx) (domain.Issue, error) {
+		return s.createIssueTx(ctx, tx, i)
+	})
+}
+
+func (s *Store) createIssueTx(ctx context.Context, tx *sql.Tx, i domain.Issue) (domain.Issue, error) {
 	var identifier string
 	var counter int
-	err = tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, `
 		UPDATE projects
 		SET issue_counter = issue_counter + 1, updated_at = ?
 		WHERE id = ?
@@ -245,9 +266,6 @@ func (s *Store) CreateIssue(ctx context.Context, i domain.Issue) (domain.Issue, 
 		if isForeignKey(err) {
 			return domain.Issue{}, domain.ErrNotFound
 		}
-		return domain.Issue{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return domain.Issue{}, err
 	}
 	return i, nil

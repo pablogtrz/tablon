@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pablogtrz/tablon/internal/domain"
+	"github.com/pablogtrz/tablon/internal/events"
 	"github.com/pablogtrz/tablon/internal/store"
 )
 
@@ -220,5 +222,167 @@ func TestIssueListFiltersSortsAndPaginates(t *testing.T) {
 	}
 	if len(next.Items) != 1 || next.Items[0].Title != "Low" {
 		t.Fatalf("unexpected next page: %+v", next.Items)
+	}
+}
+
+func TestCommentsValidationIdempotencyAndUpdates(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	p := mustProject(t, svc, "Comments", "CMT")
+	issue, err := svc.CreateIssue(ctx, p.ID, CreateIssueInput{Title: "Issue"})
+	if err != nil {
+		t.Fatalf("create issue: %v", err)
+	}
+
+	if _, err := svc.CreateComment(ctx, issue.ID, CreateCommentInput{Content: "   "}); err == nil {
+		t.Fatal("empty comment accepted")
+	}
+	long := make([]byte, 20001)
+	for i := range long {
+		long[i] = 'a'
+	}
+	if _, err := svc.CreateComment(ctx, issue.ID, CreateCommentInput{Content: string(long)}); err == nil {
+		t.Fatal("oversized comment accepted")
+	}
+
+	agent := "agent-a"
+	first, err := svc.CreateComment(ctx, issue.Identifier, CreateCommentInput{
+		Content: "hello **world**",
+		AgentID: &agent,
+	})
+	if err != nil {
+		t.Fatalf("create comment: %v", err)
+	}
+	if first.AgentID == nil || *first.AgentID != agent {
+		t.Fatalf("agent = %v", first.AgentID)
+	}
+
+	replayed, wasReplay, err := svc.CreateCommentIdempotent(ctx, issue.Identifier, CreateCommentInput{
+		Content: "hello **world**",
+		AgentID: &agent,
+	}, "key-1", "hash-1")
+	if err != nil || wasReplay {
+		t.Fatalf("first idempotent create: replayed=%v err=%v", wasReplay, err)
+	}
+	again, wasReplay, err := svc.CreateCommentIdempotent(ctx, issue.Identifier, CreateCommentInput{
+		Content: "hello **world**",
+		AgentID: &agent,
+	}, "key-1", "hash-1")
+	if err != nil || !wasReplay {
+		t.Fatalf("replay: replayed=%v err=%v", wasReplay, err)
+	}
+	if again.ID != replayed.ID {
+		t.Fatalf("replayed id = %q, want %q", again.ID, replayed.ID)
+	}
+
+	edited := "updated"
+	updated, err := svc.UpdateComment(ctx, first.ID, UpdateCommentInput{Content: &edited})
+	if err != nil {
+		t.Fatalf("update comment: %v", err)
+	}
+	if updated.Content != edited {
+		t.Fatalf("content = %q", updated.Content)
+	}
+	if !updated.UpdatedAt.After(first.UpdatedAt) {
+		t.Fatalf("updated_at did not advance: %v <= %v", updated.UpdatedAt, first.UpdatedAt)
+	}
+
+	page, err := svc.ListComments(ctx, issue.Identifier, 0, "")
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("comments = %d, want 2", len(page.Items))
+	}
+
+	if err := svc.DeleteComment(ctx, first.ID); err != nil {
+		t.Fatalf("delete comment: %v", err)
+	}
+	if _, err := svc.UpdateComment(ctx, first.ID, UpdateCommentInput{Content: &edited}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("update deleted comment error = %v", err)
+	}
+}
+
+func TestIdempotencyKeyValidation(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	p := mustProject(t, svc, "Keys", "KEY")
+	if _, _, err := svc.CreateIssueIdempotent(ctx, p.ID, CreateIssueInput{Title: "X"}, "bad key", "h"); err == nil {
+		t.Fatal("space in idempotency key accepted")
+	}
+	long := make([]byte, 129)
+	for i := range long {
+		long[i] = 'k'
+	}
+	if _, _, err := svc.CreateIssueIdempotent(ctx, p.ID, CreateIssueInput{Title: "X"}, string(long), "h"); err == nil {
+		t.Fatal("oversized idempotency key accepted")
+	}
+}
+
+type countingPublisher struct {
+	mu     sync.Mutex
+	events []events.Event
+}
+
+func (p *countingPublisher) Publish(event events.Event) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, event)
+}
+
+func (p *countingPublisher) count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.events)
+}
+
+func TestIdempotentReplayDoesNotPublishDuplicateEvents(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	publisher := &countingPublisher{}
+	svc := New(st, publisher)
+	ctx := context.Background()
+	project, err := svc.CreateProject(ctx, CreateProjectInput{Name: "Events", Identifier: "EVS"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	issue, replayed, err := svc.CreateIssueIdempotent(
+		ctx, project.ID, CreateIssueInput{Title: "Idempotent issue"}, "issue-key", "issue-hash",
+	)
+	if err != nil || replayed {
+		t.Fatalf("create issue: replayed=%v err=%v", replayed, err)
+	}
+	if publisher.count() != 1 {
+		t.Fatalf("events after create = %d, want 1", publisher.count())
+	}
+	if _, replayed, err := svc.CreateIssueIdempotent(
+		ctx, project.ID, CreateIssueInput{Title: "Idempotent issue"}, "issue-key", "issue-hash",
+	); err != nil || !replayed {
+		t.Fatalf("replay issue: replayed=%v err=%v", replayed, err)
+	}
+	if publisher.count() != 1 {
+		t.Fatalf("events after issue replay = %d, want 1", publisher.count())
+	}
+
+	if _, replayed, err := svc.CreateCommentIdempotent(
+		ctx, issue.Identifier, CreateCommentInput{Content: "once"}, "comment-key", "comment-hash",
+	); err != nil || replayed {
+		t.Fatalf("create comment: replayed=%v err=%v", replayed, err)
+	}
+	if publisher.count() != 2 {
+		t.Fatalf("events after comment create = %d, want 2", publisher.count())
+	}
+	if _, replayed, err := svc.CreateCommentIdempotent(
+		ctx, issue.Identifier, CreateCommentInput{Content: "once"}, "comment-key", "comment-hash",
+	); err != nil || !replayed {
+		t.Fatalf("replay comment: replayed=%v err=%v", replayed, err)
+	}
+	if publisher.count() != 2 {
+		t.Fatalf("events after comment replay = %d, want 2", publisher.count())
 	}
 }
