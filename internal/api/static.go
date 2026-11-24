@@ -60,6 +60,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 				"base-uri 'self'; "+
 				"form-action 'self'; "+
 				"frame-ancestors 'none'")
+		// SSE overrides this with no-cache; every JSON/API response, including
+		// method-not-allowed errors, must not be cached.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			h.Set("Cache-Control", "no-store")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -89,15 +94,13 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if rel == "" {
+	if rel == "" || rel == indexFile {
 		s.static.serveIndex(w, r)
 		return
 	}
 
 	cache := cacheShort
 	switch {
-	case rel == indexFile:
-		cache = cacheNoCache
 	case strings.HasPrefix(rel, "assets/"):
 		cache = cacheImmutable
 	case path.Ext(rel) != "":

@@ -3,6 +3,7 @@ package api_test
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -39,7 +40,7 @@ func get(t *testing.T, a *testAPI, path string) (*http.Response, string) {
 func TestStaticServesIndexAndDeepLinks(t *testing.T) {
 	a := newTestAPIWithAssets(t, "", staticAssets())
 
-	for _, path := range []string{"/", "/projects/TABLON", "/projects/TABLON/issues/TABLON-1", "/settings"} {
+	for _, path := range []string{"/", "/index.html", "/projects/TABLON", "/projects/TABLON/issues/TABLON-1", "/settings"} {
 		res, body := get(t, a, path)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("GET %s status = %d", path, res.StatusCode)
@@ -134,15 +135,17 @@ func TestStaticMissingIndexReturns503(t *testing.T) {
 	}
 	a := newTestAPIWithAssets(t, "", assets)
 
-	res, body := get(t, a, "/")
-	if res.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", res.StatusCode)
-	}
-	if !strings.Contains(body, "frontend is not built") {
-		t.Fatalf("body = %q", body)
-	}
-	if got := res.Header.Get("Cache-Control"); got != "no-store" {
-		t.Fatalf("Cache-Control = %q", got)
+	for _, path := range []string{"/", "/index.html"} {
+		res, body := get(t, a, path)
+		if res.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("GET %s status = %d, want 503", path, res.StatusCode)
+		}
+		if !strings.Contains(body, "frontend is not built") {
+			t.Fatalf("GET %s body = %q", path, body)
+		}
+		if got := res.Header.Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("GET %s Cache-Control = %q", path, got)
+		}
 	}
 }
 
@@ -160,5 +163,55 @@ func TestStaticSecurityHeaders(t *testing.T) {
 		if got := res.Header.Get(header); got == "" {
 			t.Fatalf("missing %s", header)
 		}
+	}
+}
+
+func TestStaticRejectsTraversal(t *testing.T) {
+	a := newTestAPIWithAssets(t, "", staticAssets())
+
+	for _, target := range []string{
+		"/assets/../../etc/passwd",
+		"/assets/%2e%2e/%2e%2e/etc/passwd",
+	} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rec := httptest.NewRecorder()
+		a.srv.Config.Handler.ServeHTTP(rec, req)
+		if rec.Code == http.StatusOK {
+			t.Fatalf("GET %s returned 200", target)
+		}
+		if strings.Contains(rec.Body.String(), "root:") {
+			t.Fatalf("GET %s leaked a filesystem file", target)
+		}
+	}
+}
+
+func TestAPISecurityHeadersAndNoStore(t *testing.T) {
+	a := newTestAPIWithAssets(t, "", staticAssets())
+
+	req, err := http.NewRequest(http.MethodPut, a.srv.URL+"/api/v1/projects", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	res, err := a.srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", res.StatusCode)
+	}
+	for _, header := range []string{
+		"X-Content-Type-Options",
+		"Referrer-Policy",
+		"Permissions-Policy",
+		"Content-Security-Policy",
+	} {
+		if got := res.Header.Get(header); got == "" {
+			t.Fatalf("missing %s", header)
+		}
+	}
+	if got := res.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
 }
