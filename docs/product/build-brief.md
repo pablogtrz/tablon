@@ -74,6 +74,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
 ## Constraints
 
 - Go 1.27.4, Node 22.23.4, pnpm 11.2.2, SQLite WAL.
+- License: AGPL-3.0-only.
 - Pure-Go SQLite driver for CGO-free cross-platform builds.
 - No heavy dependencies; no React, Radix, dnd-kit, TanStack or date-fns.
 - Dark only.

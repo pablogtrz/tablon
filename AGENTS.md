@@ -21,6 +21,7 @@ Tablon is an open-source, lightweight, AI-first issue tracker: a Linear alternat
 | Design tokens and base styles | `frontend/src/app.css` |
 | Frontend commands | `frontend/README.md` |
 | Writing agent instructions for target repos, CLI workflow | `agent-instructions/AGENTS.md` |
+| Project overview, stack and license | `README.md` |
 | Product scope, decisions and contracts | `docs/product/build-brief.md` |
 | Architecture and data model | `docs/architecture.md` (planned) |
 
