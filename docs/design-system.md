@@ -9,12 +9,13 @@ Tokens and base styles live in `frontend/src/app.css`. This file explains how to
 | Path | Purpose |
 |---|---|
 | `frontend/src/app.css` | Tokens, shadcn bridge, base styles, glass/focus utilities. |
-| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IdChip, AgentChip. |
+| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IdChip, AgentChip, BoardCard, IssueBoard, CommentsSection, CommentItem, CodeBlockDialog. |
 | `frontend/src/lib/components/ui/` | shadcn-svelte components, added on demand. |
 | `frontend/src/lib/utils.ts` | `cn()` helper. |
 | `frontend/src/lib/types.ts` | Status/priority unions, labels and tones. |
 | `frontend/src/lib/meta.ts` | Status/priority icons, tones and select options. |
-| `frontend/src/lib/markdown.ts` | Markdown render, sanitization and task toggling. |
+| `frontend/src/lib/markdown.ts` | Markdown render, sanitization, code block affordances and task toggling. |
+| `frontend/src/lib/editor-theme.ts` | CodeMirror theme and custom Markdown decorations. |
 | `frontend/components.json` | shadcn-svelte config. |
 
 Do not create a parallel style folder.
@@ -68,8 +69,8 @@ Do not create a parallel style folder.
 - Sidebar: brand, search, workspace views, projects, settings. Keep agent/idle detail out of the default sidebar.
 - Top bar: breadcrumb, one live/SSE state, one primary action (`New issue`).
 - Project header: logo, title, status icon + label, one quiet meta line. Issue lists lead with ID, tinted status cell, priority badge, then title.
-- Board: three columns, two cards per column in mocks, counts in headers. Cards show ID, title, priority and one owner/category at most.
-- Mobile: board snaps horizontally; tables stack; drawer nav.
+- Board: four exact columns `Todo`, `In Progress`, `In Review`, `Done`; counts in headers. Backlog and Canceled are not columns; the card move menu can reach them. Cards show ID, title, priority and one owner/category at most. No glass on cards or scrolling columns.
+- Mobile: board snaps horizontally and exposes the move menu; tables stack; drawer nav.
 
 ## Components
 
@@ -78,6 +79,10 @@ Do not create a parallel style folder.
 - Status/priority: use `StatusCell`, `PriorityBadge`, `ProjectStatusBadge`, `EpicStatusBadge`. Use `Select` for status/priority controls. Do not recreate their CSS inline.
 - Cards: glass only for large items. Project card: logo, name, ID, status icon + label, progress bar, counts, updated time.
 - Markdown: `MarkdownRenderer` for read mode and preview; `MarkdownEditor` for editing. Task checkboxes toggle the source; https images, tables and task lists are allowed; malformed HTML is sanitized.
+- Editor: CodeMirror 6 core with custom Markdown decorations. No textarea editing surface. Headings, emphasis, inline code, links, lists and fenced blocks are styled in source while the Markdown markers stay visible. Keep the editor in the lazy IssueView chunk.
+- Code blocks: insert through `CodeBlockDialog` with an optional language. Rendered blocks get a language header and Copy action. No language-specific syntax highlighting in v0.1.
+- Comments: full-width section on issue detail, chronological, agent chip or `Local`, edited marker, inline Markdown edit, confirm delete, compact composer.
+- Board interactions: native HTML5 drag on desktop; every card also has a 40px move menu with all six statuses; `Alt+ArrowLeft/Right` moves across visible columns and restores focus.
 - Native dialog: `<dialog>` with `showModal()`, accessible name, `closedby="any"`, `<form method="dialog">`. No manual focus trap or Esc handler. Visible close button. Entry motion uses `@starting-style`, `transition-behavior: allow-discrete` and `overlay`.
 - Tables: region + `tabindex="0"` + caption; sticky header on desktop; stacked labeled cards below 640px.
 - Toasts: bottom-right, polite live region, keyboard-focusable close, pause on hover/focus.
@@ -99,7 +104,8 @@ Do not create a parallel style folder.
 - Native dialog handles focus, Esc and return-to-invoker.
 - Tables and Markdown tables expose a region, caption/label and keyboard scrolling.
 - Custom selects use the native select keyboard contract; unsupported browsers get the native picker.
-- SSE updates use a polite live region.
+- SSE updates use a polite live region; do not block the UI when the stream is unavailable. Announce issue/comment changes only while the document is visible.
+- CodeMirror content is labelled (`aria-label`) and keyboard operable. Copy feedback uses a polite status, not a toast.
 
 ## Svelte 5
 
@@ -120,6 +126,10 @@ Do not create a parallel style folder.
 - [ ] One primary action per view; fewer elements than the last pass.
 - [ ] 360, 390 and 768px checked; no horizontal overflow.
 - [ ] Tables stack below 640px; dialogs use native `<dialog>`.
+- [ ] Board has four exact columns, native drag, a keyboard/menu alternative and no horizontal page overflow.
+- [ ] Comments are chronological, sanitized, editable and deletable with focus restoration.
+- [ ] Editing uses CodeMirror, not a textarea; headings and code fences are visually distinct without hiding Markdown markers.
+- [ ] Code blocks expose a language header and keyboard-accessible Copy action.
 - [ ] Focus, labels, keyboard path and reduced motion checked.
 - [ ] UI text uses canonical labels and sentence case.
 - [ ] Interactive controls show pointer cursor; disabled controls show not-allowed.
