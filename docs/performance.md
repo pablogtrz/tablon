@@ -62,6 +62,34 @@ memory win today.
 | Normal workload under 100 MB | ~13 MB | Met |
 | Native startup under 1 s | ~0.06 s | Met |
 
+## Raspberry Pi 4 (arm64)
+
+Environment: Raspberry Pi 4, 3.7 GiB RAM, Debian 13 kernel 6.18.50, aarch64,
+Docker 29.10.0 and Compose v5.8.0. The native binary was extracted from the
+arm64 image (11.2 MB stripped) and run directly three times with the same
+workload. The container process was measured with `ps` because `docker stats`
+reported `0B / 0B` on this cgroup setup.
+
+| Metric | Native runs | Docker process |
+|---|---|---|
+| Startup to `/ready` | 0.160-0.162 s | n/a |
+| RSS after start | 10.4-10.6 MB | n/a |
+| RSS after workload | 14.5-14.6 MB | n/a |
+| RSS after idle, state `idle` | 14.7-14.8 MB | 10.4 MB |
+| First request after idle | 0.102-0.103 s | n/a |
+| RSS after reactivation | 14.9-15.0 MB | 11.1 MB |
+| List 50 issues latency | 0.102-0.103 s | n/a |
+
+The Docker image is 31,872,202 bytes uncompressed. The image built successfully
+on the Pi (Go and frontend builds inside Docker), the Compose service became
+healthy with the real local database, persisted it across a restart, served the
+SPA, deep links and `/openapi.yaml`, and ran as UID 10001 with a read-only root,
+`cap_drop: ALL`, `no-new-privileges` and no Node. The imported database had 3
+projects, 6 epics, 42 issues and 21 comments.
+
+Idle mode again showed no material RSS reduction; the Pi numbers are consistent
+with the Mac result.
+
 ## Go benchmarks
 
 Store benchmarks seed about 10k issues and 5k comments outside the timed loop.

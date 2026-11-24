@@ -252,10 +252,11 @@ Verified:
 - `goreleaser check`, `goreleaser build --snapshot --clean`, and `goreleaser release --snapshot --clean` (10 archives + `SHA256SUMS`; versions injected).
 - `docker compose config`.
 - `scripts/bench.sh`: startup 0.06-0.08 s, RSS 9.0-9.3 MB at start, 12.8-12.9 MB after workload, 13.0-14.0 MB idle, first request after idle 0.030-0.036 s; binary 11.9 MB.
+- Raspberry Pi 4 arm64: Docker image built on the Pi, Compose healthy with the real local database (3 projects, 6 epics, 42 issues, 21 comments), persisted across restart, read-only/non-root/no-Node hardening verified, SPA/deep links/OpenAPI served, idle status observed. Native benchmark: startup 0.160-0.162 s, RSS 10.4-10.6 MB at start, 14.5-14.6 MB after workload, 14.7-14.8 MB idle, first request after idle 0.102-0.103 s. Image 31.9 MB; container process RSS 10.4 MB idle / 11.1 MB active.
 
 Known limits:
 
-- Docker image build/smoke was not run locally because the Docker daemon was unavailable; the CI `docker` job covers it.
+- The Docker image was built and smoke-tested on the Raspberry Pi 4 arm64; the local Mac Docker daemon was unavailable. The CI `docker` job remains the repeatable check.
 - Idle mode does not materially reduce RSS at this workload. Forced `debug.FreeOSMemory` was removed after it increased RSS; the activity gate is the durable part.
 - Release artifacts were verified with a snapshot only; the first tagged release and GHCR push remain pending review/approval.
 - A server binary without `-tags embed` serves the API but not the SPA.
