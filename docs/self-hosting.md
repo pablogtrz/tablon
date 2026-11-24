@@ -14,11 +14,11 @@ docker compose ps
 docker compose logs -f
 ```
 
-Open `http://127.0.0.1:8080`. Compose publishes only on `127.0.0.1` by default
+Open `http://127.0.0.1:8448`. Compose publishes only on `127.0.0.1` by default
 and stores data in the `tablon-data` named volume. `docker compose down` keeps
 the volume; `docker compose down -v` deletes it.
 
-- `TABLON_HOST_PORT` changes the host port; the container listens on `8080`.
+- `TABLON_HOST_PORT` changes the host port; the container listens on `8448`.
 - To expose on a LAN, change the Compose binding from `127.0.0.1` to `0.0.0.0`
   and set `TABLON_API_TOKEN`; prefer a TLS reverse proxy.
 - The runtime image is Alpine, runs as UID/GID 10001, uses a read-only root and
@@ -38,7 +38,7 @@ tar -xzf tablon_VERSION_OS_ARCH.tar.gz
 TABLON_DATA_DIR=./data ./tablond
 ```
 
-Open `http://127.0.0.1:8080`. The CLI is published separately as
+Open `http://127.0.0.1:8448`. The CLI is published separately as
 `tablon-cli_VERSION_OS_ARCH.tar.gz`; alternatively run
 `go install github.com/pablogtrz/tablon/cmd/tablon@latest`.
 
@@ -54,14 +54,14 @@ Verify a binary without starting the server:
 | Variable | Default | Notes |
 |---|---|---|
 | `TABLON_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only behind a trusted proxy or with a token. |
-| `TABLON_PORT` | `8080` | API/UI port. |
+| `TABLON_PORT` | `8448` | API/UI port. |
 | `TABLON_DATA_DIR` | `./data` | SQLite directory. Must be writable by the process user. |
 | `TABLON_API_TOKEN` | empty | Optional bearer token for `/api/v1`. Empty means no auth. |
 | `TABLON_IDLE_ENABLED` | `true` | Enable the idle activity gate. |
 | `TABLON_IDLE_TIMEOUT` | `5m` | Quiet period before idle. Parsed as a Go duration (`300s`, `5m`). |
 | `TABLON_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. |
-| `TABLON_HOST_PORT` | `8080` | Compose-only host port. |
-| `TABLON_CLI_URL` | `http://127.0.0.1:8080` | CLI server URL. |
+| `TABLON_HOST_PORT` | `8448` | Compose-only host port. |
+| `TABLON_CLI_URL` | `http://127.0.0.1:8448` | CLI server URL. |
 | `TABLON_CLI_TOKEN` | empty | CLI bearer token. |
 
 Invalid core configuration fails at startup with a clear error. The API contract
@@ -97,7 +97,7 @@ Caddy:
 
 ```caddyfile
 tablon.example.com {
-    reverse_proxy 127.0.0.1:8080 {
+    reverse_proxy 127.0.0.1:8448 {
         flush_interval -1
     }
 }
@@ -111,7 +111,7 @@ server {
     server_name tablon.example.com;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8448;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

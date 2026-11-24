@@ -42,7 +42,7 @@ type Client struct {
 func NewClient(baseURL, token string, timeout time.Duration) (*Client, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:8080"
+		baseURL = "http://127.0.0.1:8448"
 	}
 	parsed, err := url.Parse(baseURL)
 	if err != nil {

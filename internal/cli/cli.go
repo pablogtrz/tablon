@@ -324,7 +324,7 @@ Commands:
   version   print build version
 
 Environment:
-  TABLON_CLI_URL    default http://127.0.0.1:8080
+  TABLON_CLI_URL    default http://127.0.0.1:8448
   TABLON_CLI_TOKEN  optional bearer token
 
 Output:

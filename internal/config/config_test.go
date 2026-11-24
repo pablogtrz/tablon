@@ -61,7 +61,7 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("TABLON_HOST", "127.0.0.1")
-			t.Setenv("TABLON_PORT", "8080")
+			t.Setenv("TABLON_PORT", "8448")
 			t.Setenv("TABLON_DATA_DIR", "./data")
 			t.Setenv("TABLON_LOG_LEVEL", "info")
 			t.Setenv("TABLON_IDLE_ENABLED", "true")

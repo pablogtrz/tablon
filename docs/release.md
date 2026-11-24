@@ -70,7 +70,7 @@ shasum -a 256 -c SHA256SUMS     # macOS
 sha256sum -c SHA256SUMS          # Linux
 ./tablond --version
 ./tablon version
-curl -s http://127.0.0.1:8080/api/v1/system/status | jq .version
+curl -s http://127.0.0.1:8448/api/v1/system/status | jq .version
 docker run --rm ghcr.io/pablogtrz/tablon:0.1.0 --version
 docker buildx imagetools inspect ghcr.io/pablogtrz/tablon:0.1.0
 ```

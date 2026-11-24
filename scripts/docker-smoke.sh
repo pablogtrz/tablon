@@ -38,7 +38,7 @@ docker volume create "$VOLUME" >/dev/null
 docker run -d --name "$NAME" \
   --read-only --tmpfs /tmp \
   --cap-drop ALL --security-opt no-new-privileges:true \
-  -p "127.0.0.1:$PORT:8080" \
+  -p "127.0.0.1:$PORT:8448" \
   -v "$VOLUME:/data" \
   -e TABLON_API_TOKEN="$TOKEN" \
   -e TABLON_IDLE_ENABLED=false \

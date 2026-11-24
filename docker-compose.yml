@@ -9,12 +9,12 @@ services:
     image: ghcr.io/pablogtrz/tablon:${TABLON_VERSION:-dev}
     container_name: tablon
     ports:
-      - "127.0.0.1:${TABLON_HOST_PORT:-8080}:8080"
+      - "127.0.0.1:${TABLON_HOST_PORT:-8448}:8448"
     volumes:
       - tablon-data:/data
     environment:
       TABLON_HOST: 0.0.0.0
-      TABLON_PORT: 8080
+      TABLON_PORT: 8448
       TABLON_DATA_DIR: /data
       TABLON_API_TOKEN: ${TABLON_API_TOKEN:-}
       TABLON_IDLE_ENABLED: ${TABLON_IDLE_ENABLED:-true}
@@ -32,7 +32,7 @@ services:
       - no-new-privileges:true
     stop_grace_period: 10s
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8448/health"]
       interval: 30s
       timeout: 3s
       start_period: 5s

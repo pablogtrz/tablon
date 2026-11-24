@@ -48,12 +48,12 @@ Add new docs to this index. Keep each doc short and focused; link instead of rep
 ## Commands
 
 ```bash
-cd frontend && pnpm dev      # dev server, proxies /api to :8080
+cd frontend && pnpm dev      # dev server, proxies /api to :8448
 cd frontend && pnpm check    # types + Svelte diagnostics
 cd frontend && pnpm test     # unit tests
 cd frontend && pnpm test:e2e # Chromium, Firefox and WebKit
 cd frontend && pnpm build    # static assets for go:embed
-go run ./cmd/server          # API on 127.0.0.1:8080; pair with Vite
+go run ./cmd/server          # API on 127.0.0.1:8448; pair with Vite
 go run ./cmd/tablon --help   # CLI
 go test ./...                # backend + CLI tests
 go vet ./...

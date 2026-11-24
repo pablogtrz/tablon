@@ -13,7 +13,7 @@ import (
 
 const (
 	DefaultHost    = "127.0.0.1"
-	DefaultPort    = 8080
+	DefaultPort    = 8448
 	DefaultDataDir = "./data"
 )
 

@@ -69,7 +69,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open **http://127.0.0.1:8080**. Compose publishes only on loopback by default and
+Open **http://127.0.0.1:8448**. Compose publishes only on loopback by default and
 stores SQLite in the `tablon-data` named volume.
 
 ```bash
@@ -87,7 +87,7 @@ Download `tablond` for your OS/arch from
 TABLON_DATA_DIR=./data ./tablond
 ```
 
-Open **http://127.0.0.1:8080**. Install the CLI from the same release or with
+Open **http://127.0.0.1:8448**. Install the CLI from the same release or with
 `go install github.com/pablogtrz/tablon/cmd/tablon@latest`.
 
 ### From source (development)
@@ -109,7 +109,7 @@ pnpm dev
 ```
 
 Open **http://127.0.0.1:5173**. Vite serves the UI and proxies `/api` to the Go
-server on `:8080`; `go run` without `-tags embed` serves the API only.
+server on `:8448`; `go run` without `-tags embed` serves the API only.
 
 The server embeds the built SPA when compiled with `-tags embed`, so production
 and Docker need no Node runtime. The Vite dev server is only for frontend
@@ -130,7 +130,7 @@ guidance, backups and upgrades.
 go install github.com/pablogtrz/tablon/cmd/tablon@latest
 
 # Point it at the server
-export TABLON_CLI_URL="http://127.0.0.1:8080"
+export TABLON_CLI_URL="http://127.0.0.1:8448"
 export TABLON_CLI_TOKEN="optional-token"
 
 # Discover work
@@ -153,15 +153,15 @@ Use `--compact` for routine reads and `--json` when parsing. The ready-to-copy t
 | Variable | Default | Purpose |
 |---|---|---|
 | `TABLON_HOST` | `127.0.0.1` | API bind address |
-| `TABLON_PORT` | `8080` | API port |
+| `TABLON_PORT` | `8448` | API port |
 | `TABLON_DATA_DIR` | `./data` | SQLite database directory |
 | `TABLON_API_TOKEN` | empty | Optional bearer token for `/api/v1` |
 | `TABLON_IDLE_ENABLED` | `true` | Enable the idle activity gate |
 | `TABLON_IDLE_TIMEOUT` | `5m` | Quiet period before idle mode |
 | `TABLON_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
-| `TABLON_CLI_URL` | `http://127.0.0.1:8080` | CLI API base URL |
+| `TABLON_CLI_URL` | `http://127.0.0.1:8448` | CLI API base URL |
 | `TABLON_CLI_TOKEN` | empty | CLI bearer token |
-| `TABLON_HOST_PORT` | `8080` | Compose-only host port published on `127.0.0.1` |
+| `TABLON_HOST_PORT` | `8448` | Compose-only host port published on `127.0.0.1` |
 
 Native binds default to loopback. If you expose Tablon beyond your machine, set
 `TABLON_API_TOKEN` and use HTTPS through a reverse proxy. The API contract is

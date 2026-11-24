@@ -41,13 +41,13 @@ COPY LICENSE README.md /usr/local/share/doc/tablon/
 WORKDIR /data
 USER 10001:10001
 ENV TABLON_HOST=0.0.0.0 \
-    TABLON_PORT=8080 \
+    TABLON_PORT=8448 \
     TABLON_DATA_DIR=/data \
     TMPDIR=/tmp \
     HOME=/tmp
-EXPOSE 8080
+EXPOSE 8448
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:8080/health || exit 1
+    CMD wget -qO- http://127.0.0.1:8448/health || exit 1
 LABEL org.opencontainers.image.title="Tablon" \
       org.opencontainers.image.description="Lightweight, AI-first issue tracker" \
       org.opencontainers.image.source="https://github.com/pablogtrz/tablon" \
