@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/pablogtrz/tablon/internal/cli"
+	"github.com/pablogtrz/tablon/cli/internal/cli"
 )
 
 func main() {

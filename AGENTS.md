@@ -20,7 +20,8 @@ Tablon is an open-source, lightweight, AI-first issue tracker: a Linear alternat
 | UI, CSS, layout, color, motion, components, accessibility | `docs/design-system.md` |
 | Design tokens and base styles | `frontend/src/app.css` |
 | Frontend commands | `frontend/README.md` |
-| Writing agent instructions for target repos, CLI workflow | `agent-instructions/AGENTS.md` |
+| CLI commands, flags, output and retries | `cli/README.md` |
+| Portable agent adapter and per-client install | `agent/Tablon.md`, `agent/README.md` |
 | Project overview, stack and license | `README.md` |
 | Product scope, decisions and contracts | `docs/product/build-brief.md` |
 | API contract, endpoints and schemas | `docs/api/openapi.yaml` |
@@ -36,13 +37,14 @@ Add new docs to this index. Keep each doc short and focused; link instead of rep
 - Go module: `github.com/pablogtrz/tablon`.
 - `assets.go` — `go:embed` for `frontend/dist` and the OpenAPI spec.
 - `frontend/` — Svelte 5 + TypeScript + Vite + Tailwind v4.
-- `cmd/server/`, `cmd/tablon/`, `internal/` — Go server and CLI.
+- `cmd/server/`, `internal/` — Go server.
+- `cli/` — `tablon` CLI (`cli/tablon` entrypoint, `cli/README.md`).
 - `migrations/` — SQLite migrations.
 - `docs/` — agent docs; `docs/api/` holds the OpenAPI contract.
 - `scripts/` — benchmark and smoke-test helpers.
 - `.github/workflows/` — CI and release automation.
 - `Dockerfile`, `docker-compose.yml`, `.env.example` — self-hosting.
-- `agent-instructions/` — distributable `AGENTS.md` template for target repos.
+- `agent/` — portable `Tablon.md` adapter and client wrappers.
 - `data/` — runtime database (gitignored).
 
 ## Commands
@@ -54,11 +56,13 @@ cd frontend && pnpm test     # unit tests
 cd frontend && pnpm test:e2e # Chromium, Firefox and WebKit
 cd frontend && pnpm build    # static assets for go:embed
 go run ./cmd/server          # API on 127.0.0.1:8448; pair with Vite
-go run ./cmd/tablon --help   # CLI
+go run ./cli/tablon --help   # CLI
 go test ./...                # backend + CLI tests
 go vet ./...
 go test -race ./...
-./scripts/bench.sh           # startup/RSS/latency measurements
+./scripts/bench.sh           # macOS startup/RSS/latency measurements
+./scripts/bench-runtime.sh   # native vs Docker runtime/storage (Linux)
+python3 scripts/bench-tokens.py --url <server> --cli <tablon>  # token cost
 docker compose up --build    # container
 ```
 
