@@ -1,0 +1,206 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - name: module tidiness
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go test -race ./...
+      - name: migrations
+        run: go test ./internal/store -run TestMigrate -v
+      - name: benchmark smoke
+        run: go test -run '^$' -bench . -benchtime=1x ./internal/store ./internal/api
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: check
+        working-directory: frontend
+        run: pnpm check
+      - name: unit tests
+        working-directory: frontend
+        run: pnpm test
+      - name: build
+        working-directory: frontend
+        run: pnpm build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: cache playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}-${{ matrix.browser }}
+      - name: install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: install browser
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: e2e
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: pnpm exec playwright test --project=${{ matrix.browser }}
+
+  binary-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: embed tests
+        run: go test -tags embed ./...
+      - name: embedded binary smoke
+        run: ./scripts/ci-smoke.sh
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - id: builddate
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: tablon:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.builddate.outputs.value }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: image size
+        run: docker image inspect --format 'image_size_bytes={{.Size}}' tablon:ci
+      - name: compose config
+        run: docker compose config
+      - name: docker smoke
+        run: ./scripts/docker-smoke.sh tablon:ci
+
+  cross-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          ext=""
+          if [ "$GOOS" = windows ]; then ext=".exe"; fi
+          dir="bin/${GOOS}-${GOARCH}"
+          mkdir -p "$dir"
+          ldflags="-s -w -X github.com/pablogtrz/tablon/internal/version.Version=ci -X github.com/pablogtrz/tablon/internal/version.Commit=${{ github.sha }}"
+          CGO_ENABLED=0 go build -trimpath -tags embed -ldflags "$ldflags" -o "$dir/tablond${ext}" ./cmd/server
+          CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dir/tablon${ext}" ./cmd/tablon
+          test -s "$dir/tablond${ext}"
+          test -s "$dir/tablon${ext}"
+          file "$dir/tablond${ext}"
+
+  goreleaser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check
