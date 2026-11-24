@@ -54,25 +54,53 @@
 | Automation | `tablon` CLI, JSON/compact output, idempotent creates, claim/release |
 | Live updates | Per-project SSE with heartbeat, reconnect/refetch and polite announcements |
 | Security | Optional bearer-token auth; `/health` and `/ready` stay public |
+| Deployment | One binary with embedded SPA, Docker Compose, non-root read-only container |
+| API contract | OpenAPI 3.0.3 served at `/openapi.yaml` |
 
 ## Quick start
 
-**Prerequisites:** Go 1.27+, Node 22.12+ and pnpm 11+.
+### Docker Compose (recommended)
+
+Prerequisites: Docker with Compose v2.
+
+```bash
+cp .env.example .env
+# Set TABLON_API_TOKEN before exposing Tablon beyond 127.0.0.1.
+docker compose up -d --build
+```
+
+Open **http://127.0.0.1:8080**. Compose publishes only on loopback by default and
+stores SQLite in the `tablon-data` named volume.
+
+```bash
+docker compose logs -f
+docker compose down          # keeps the volume
+```
+
+### Prebuilt binary
+
+Download `tablond` for your OS/arch from
+[GitHub Releases](https://github.com/pablogtrz/tablon/releases/latest), verify
+`SHA256SUMS`, then run it:
+
+```bash
+TABLON_DATA_DIR=./data ./tablond
+```
+
+Open **http://127.0.0.1:8080**. Install the CLI from the same release or with
+`go install github.com/pablogtrz/tablon/cmd/tablon@latest`.
+
+### From source (development)
+
+Prerequisites: Go 1.27+, Node 22.12+ and pnpm 11+.
 
 ```bash
 git clone https://github.com/pablogtrz/tablon.git
 cd tablon
-```
-
-Start the API:
-
-```bash
 go run ./cmd/server
 ```
 
-The API listens on `http://127.0.0.1:8080` and stores data in `./data`.
-
-In a second terminal, start the UI:
+In a second terminal:
 
 ```bash
 cd frontend
@@ -80,9 +108,20 @@ pnpm install
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**.
+Open **http://127.0.0.1:5173**. Vite serves the UI and proxies `/api` to the Go
+server on `:8080`; `go run` without `-tags embed` serves the API only.
 
-> Docker, a one-binary build and CI releases are the M3 milestone. Today Tablon runs from source with the API and Vite dev server.
+The server embeds the built SPA when compiled with `-tags embed`, so production
+and Docker need no Node runtime. The Vite dev server is only for frontend
+development:
+
+```bash
+pnpm --dir frontend build
+go build -tags embed -o bin/tablond ./cmd/server
+```
+
+See [`docs/self-hosting.md`](docs/self-hosting.md) for reverse proxies, token
+guidance, backups and upgrades.
 
 ## Agent workflow
 
@@ -117,23 +156,32 @@ Use `--compact` for routine reads and `--json` when parsing. The ready-to-copy t
 | `TABLON_PORT` | `8080` | API port |
 | `TABLON_DATA_DIR` | `./data` | SQLite database directory |
 | `TABLON_API_TOKEN` | empty | Optional bearer token for `/api/v1` |
+| `TABLON_IDLE_ENABLED` | `true` | Enable the idle activity gate |
+| `TABLON_IDLE_TIMEOUT` | `5m` | Quiet period before idle mode |
 | `TABLON_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `TABLON_CLI_URL` | `http://127.0.0.1:8080` | CLI API base URL |
 | `TABLON_CLI_TOKEN` | empty | CLI bearer token |
+| `TABLON_HOST_PORT` | `8080` | Compose-only host port published on `127.0.0.1` |
 
-Native binds default to loopback. If you expose Tablon beyond your machine, set `TABLON_API_TOKEN` and use HTTPS through a reverse proxy.
+Native binds default to loopback. If you expose Tablon beyond your machine, set
+`TABLON_API_TOKEN` and use HTTPS through a reverse proxy. The API contract is
+served at `/openapi.yaml`.
 
 ## Architecture
 
 | Layer | Choice |
 |---|---|
-| Backend | Go 1.27, `net/http`, pure-Go SQLite, embedded migrations |
+| Backend | Go 1.27, `net/http`, pure-Go SQLite, embedded migrations and SPA |
 | Frontend | Svelte 5, TypeScript, Vite, Tailwind CSS v4, CodeMirror 6 |
-| Contract | REST + SSE, structured JSON errors, cursor pagination |
+| Contract | REST + SSE, OpenAPI 3.0.3, structured JSON errors, cursor pagination |
 | CLI | Go, REST only, no direct database access |
+| Deployment | One binary or Docker Compose; no Node at runtime |
 | Storage | SQLite WAL, per-project issue counters, cascade deletes |
 
-More detail lives in [`docs/product/build-brief.md`](docs/product/build-brief.md) and the UI rules in [`docs/design-system.md`](docs/design-system.md).
+More detail lives in [`docs/product/build-brief.md`](docs/product/build-brief.md),
+[`docs/self-hosting.md`](docs/self-hosting.md),
+[`docs/performance.md`](docs/performance.md) and the UI rules in
+[`docs/design-system.md`](docs/design-system.md).
 
 ## Development
 
@@ -142,14 +190,23 @@ go test ./...                 # backend and CLI tests
 go vet ./...
 go test -race ./...
 
-cd frontend
-pnpm check                    # types and Svelte diagnostics
-pnpm test                     # Vitest unit/component tests
-pnpm test:e2e                 # Playwright smoke suite
-pnpm build                    # production assets
+pnpm --dir frontend check     # types and Svelte diagnostics
+pnpm --dir frontend test      # Vitest unit/component tests
+pnpm --dir frontend test:e2e  # Chromium, Firefox and WebKit smoke suite
+pnpm --dir frontend build     # production assets for `-tags embed`
 ```
 
-The Playwright suite starts a token-enabled API and Vite server automatically. Install Chromium once with `pnpm exec playwright install chromium`.
+The Playwright suite starts a token-enabled API and Vite server automatically.
+Install browsers once with
+`pnpm --dir frontend exec playwright install chromium firefox webkit`.
+
+```bash
+./scripts/bench.sh            # startup, RSS, idle and latency measurements
+docker compose up --build     # full container smoke
+```
+
+`scripts/bench.sh` and `scripts/ci-smoke.sh` expect `frontend/dist` from
+`pnpm --dir frontend build` and build the server with `-tags embed`.
 
 Working rules, the repo map and the docs index live in [`AGENTS.md`](AGENTS.md).
 
@@ -159,7 +216,7 @@ Working rules, the repo map and the docs index live in [`AGENTS.md`](AGENTS.md).
 - [x] **M1.1** — status/priority polish, Markdown descriptions, motion and icons
 - [x] **M2** — board, comments, CLI, agent instructions, SSE and tests
 - [x] **M2 editor** — CodeMirror Markdown editing, code blocks and copy actions
-- [ ] **M3** — Docker, one binary, CI, releases, OpenAPI, benchmarks and self-hosting docs
+- [ ] **M3** — Docker, one binary, CI, releases, OpenAPI, benchmarks and self-hosting docs (implementation complete; first tagged release pending)
 - [ ] **v0.2** — read-only GitHub repository, branch and pull request observation
 
 ## Contributing
