@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -230,6 +231,45 @@ func BenchmarkUpdateIssueStatus(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func BenchmarkClaimIssue(b *testing.B) {
+	st, _, issue := seedBench(b, 1, 0)
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if _, err := st.ClaimIssue(ctx, issue.ID, "bench-agent", time.Now().UTC()); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := st.ReleaseIssue(ctx, issue.ID, "bench-agent", time.Now().UTC()); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkClaimIssueContended(b *testing.B) {
+	st, _, issue := seedBench(b, 1, 0)
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			if _, err := st.ClaimIssue(ctx, issue.ID, "bench-agent", time.Now().UTC()); err != nil {
+				if !errors.Is(err, domain.ErrConflict) {
+					b.Errorf("claim: %v", err)
+					return
+				}
+				continue
+			}
+			if _, err := st.ReleaseIssue(ctx, issue.ID, "bench-agent", time.Now().UTC()); err != nil {
+				b.Errorf("release: %v", err)
+				return
+			}
+		}
+	})
 }
 
 func BenchmarkListComments(b *testing.B) {

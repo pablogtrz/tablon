@@ -109,6 +109,8 @@ Representative single run (`-benchtime=50x`):
 | Get issue by identifier | 47,343 | 1,984 | 61 |
 | Create issue | 297,754 | 3,242 | 65 |
 | Update issue status | 152,227 | 748 | 17 |
+| Claim issue (claim + release) | 304,384 | 4,880 | 150 |
+| Claim issue, contended | 140,489 | 3,198 | 89 |
 | List 50 of 5k comments | 123,985 | 30,086 | 800 |
 | Get project | 38,800 | 1,712 | 51 |
 | API list issues | 559,096 | 117,886 | 1,393 |
