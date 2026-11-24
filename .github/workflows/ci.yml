@@ -35,7 +35,7 @@ jobs:
       - name: migrations
         run: go test ./internal/store -run TestMigrate -v
       - name: benchmark smoke
-        run: go test -run '^$' -bench . -benchtime=1x ./internal/store ./internal/api
+        run: go test -run '^$' -bench . -benchtime=1x ./...
 
   frontend:
     runs-on: ubuntu-latest
@@ -108,6 +108,16 @@ jobs:
         env:
           CI: 'true'
         run: pnpm exec playwright test --project=${{ matrix.browser }}
+      - name: upload playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
 
   binary-smoke:
     runs-on: ubuntu-latest
@@ -192,7 +202,8 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dir/tablon${ext}" ./cmd/tablon
           test -s "$dir/tablond${ext}"
           test -s "$dir/tablon${ext}"
-          file "$dir/tablond${ext}"
+          go version -m "$dir/tablond${ext}"
+          go version -m "$dir/tablon${ext}"
 
   goreleaser:
     runs-on: ubuntu-latest
