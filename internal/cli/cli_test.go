@@ -301,6 +301,20 @@ func TestExitCodesAndUsage(t *testing.T) {
 	if code, out, _ := run([]string{"--help"}, nil, ""); code != 0 || !strings.Contains(out, "tablon") {
 		t.Fatalf("help code = %d out = %q", code, out)
 	}
+	if code, out, _ := run([]string{"--version"}, nil, ""); code != 0 || !strings.Contains(out, "tablon dev") {
+		t.Fatalf("version code = %d out = %q", code, out)
+	}
+	code, out, _ := run([]string{"version", "--json"}, nil, "")
+	if code != 0 {
+		t.Fatalf("version json code = %d", code)
+	}
+	var info map[string]string
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("version json: %v (%q)", err, out)
+	}
+	if info["version"] == "" || info["commit"] == "" || info["date"] == "" {
+		t.Fatalf("version fields = %#v", info)
+	}
 }
 
 func TestProjectAndEpicCommands(t *testing.T) {

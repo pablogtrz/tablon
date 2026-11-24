@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pablogtrz/tablon/internal/version"
 )
 
 const maxResponseBytes = 10 << 20
@@ -58,7 +60,7 @@ func NewClient(baseURL, token string, timeout time.Duration) (*Client, error) {
 	return &Client{
 		baseURL:   parsed,
 		token:     strings.TrimSpace(token),
-		userAgent: "tablon-cli/" + Version,
+		userAgent: "tablon-cli/" + version.Version,
 		http:      &http.Client{Timeout: timeout},
 	}, nil
 }

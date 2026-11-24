@@ -11,14 +11,22 @@ import (
 	"syscall"
 	"time"
 
+	tablon "github.com/pablogtrz/tablon"
 	"github.com/pablogtrz/tablon/internal/api"
 	"github.com/pablogtrz/tablon/internal/config"
 	"github.com/pablogtrz/tablon/internal/events"
+	"github.com/pablogtrz/tablon/internal/idle"
 	"github.com/pablogtrz/tablon/internal/service"
 	"github.com/pablogtrz/tablon/internal/store"
+	"github.com/pablogtrz/tablon/internal/version"
 )
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
+		fmt.Printf("tablond %s (commit %s, built %s)\n", version.Version, version.Commit, version.Date)
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "configuration error:", err)
@@ -38,7 +46,12 @@ func main() {
 	hub := events.NewHub(logger)
 	defer hub.Close()
 	svc := service.New(st, hub)
-	handler := api.New(cfg, svc, hub, logger)
+	idleCtl := idle.New(cfg.IdleEnabled, cfg.IdleTimeout, logger, func() {
+		if err := st.EnterIdle(context.Background()); err != nil {
+			logger.Warn("release idle resources", "error", err)
+		}
+	}, st.ExitIdle)
+	handler := api.New(cfg, svc, hub, idleCtl, logger, tablon.Frontend, tablon.OpenAPI)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
@@ -56,9 +69,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.IdleEnabled {
+		logger.Info("idle mode enabled", "timeout", cfg.IdleTimeout)
+	}
+	go idleCtl.Run(ctx)
+
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("tablon listening", "addr", cfg.Addr(), "database", st.Path())
+		logger.Info("tablon listening", "addr", cfg.Addr(), "database", st.Path(), "version", version.Version)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

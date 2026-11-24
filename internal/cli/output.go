@@ -9,7 +9,24 @@ import (
 	"text/tabwriter"
 
 	"github.com/pablogtrz/tablon/internal/domain"
+	"github.com/pablogtrz/tablon/internal/version"
 )
+
+func printVersion(w io.Writer, asJSON bool) error {
+	if asJSON {
+		raw, err := json.Marshal(map[string]string{
+			"version": version.Version,
+			"commit":  version.Commit,
+			"date":    version.Date,
+		})
+		if err != nil {
+			return err
+		}
+		return printJSON(w, raw)
+	}
+	_, err := fmt.Fprintf(w, "tablon %s (commit %s, built %s)\n", version.Version, version.Commit, version.Date)
+	return err
+}
 
 func printJSON(w io.Writer, raw []byte) error {
 	if len(raw) == 0 {

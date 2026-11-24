@@ -5,12 +5,12 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pablogtrz/tablon/internal/domain"
 	"github.com/pablogtrz/tablon/internal/service"
+	"github.com/pablogtrz/tablon/internal/version"
 )
-
-const version = "dev"
 
 type listResponse[T any] struct {
 	Items      []T    `json:"items"`
@@ -30,14 +30,31 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) systemStatus(w http.ResponseWriter, r *http.Request) {
-	database := "ok"
-	if err := s.svc.Ready(r.Context()); err != nil {
-		database = "unavailable"
+	state := s.idle.State()
+	database := "idle"
+	if !state.Idle {
+		database = "ok"
+		if err := s.svc.Ready(r.Context()); err != nil {
+			database = "unavailable"
+		}
 	}
+
+	var idleSince any
+	if state.Idle && !state.IdleSince.IsZero() {
+		idleSince = state.IdleSince.UTC().Format(time.RFC3339Nano)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version":      version,
+		"version":      version.Version,
 		"auth_enabled": s.cfg.APIToken != "",
 		"database":     database,
+		"idle": map[string]any{
+			"enabled":         state.Enabled,
+			"state":           state.Name(),
+			"timeout_seconds": int(state.Timeout.Seconds()),
+			"last_activity":   state.LastActivity.UTC().Format(time.RFC3339Nano),
+			"idle_since":      idleSince,
+		},
 	})
 }
 

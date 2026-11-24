@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -17,11 +18,13 @@ const (
 )
 
 type Config struct {
-	Host     string
-	Port     int
-	DataDir  string
-	APIToken string
-	LogLevel slog.Level
+	Host        string
+	Port        int
+	DataDir     string
+	APIToken    string
+	LogLevel    slog.Level
+	IdleEnabled bool
+	IdleTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -38,6 +41,21 @@ func Load() (Config, error) {
 	}
 	cfg.Port = port
 	cfg.APIToken = os.Getenv("TABLON_API_TOKEN")
+
+	idleEnabled, err := strconv.ParseBool(env("TABLON_IDLE_ENABLED", "true"))
+	if err != nil {
+		return Config{}, fmt.Errorf("TABLON_IDLE_ENABLED must be true or false: %w", err)
+	}
+	cfg.IdleEnabled = idleEnabled
+
+	idleTimeout, err := time.ParseDuration(env("TABLON_IDLE_TIMEOUT", "5m"))
+	if err != nil {
+		return Config{}, fmt.Errorf("TABLON_IDLE_TIMEOUT must be a duration such as 5m: %w", err)
+	}
+	if idleTimeout <= 0 {
+		return Config{}, fmt.Errorf("TABLON_IDLE_TIMEOUT must be greater than zero")
+	}
+	cfg.IdleTimeout = idleTimeout
 
 	levelRaw := strings.ToLower(env("TABLON_LOG_LEVEL", "info"))
 	switch levelRaw {
