@@ -7,13 +7,15 @@ Tablon is the source of truth for issues in this repository. Use the `tablon` CL
 ```bash
 go install github.com/pablogtrz/tablon/cmd/tablon@latest
 
-export TABLON_CLI_URL="http://127.0.0.1:8080"
+export TABLON_CLI_URL="http://127.0.0.1:8448"
 export TABLON_CLI_TOKEN="optional-token"
 
 tablon --help
+tablon version
 ```
 
 Prefer environment variables. Do not commit tokens or put them in repository files.
+The machine-readable API contract is served at `$TABLON_CLI_URL/openapi.yaml`.
 
 ## Core loop
 

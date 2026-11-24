@@ -1,0 +1,117 @@
+version: 2
+
+project_name: tablon
+
+builds:
+  - id: tablond
+    main: ./cmd/server
+    binary: tablond
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+      - -tags=embed
+    ldflags:
+      - -s -w
+      - -X github.com/pablogtrz/tablon/internal/version.Version={{ .Version }}
+      - -X github.com/pablogtrz/tablon/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/pablogtrz/tablon/internal/version.Date={{ .CommitDate }}
+
+  - id: tablon
+    main: ./cmd/tablon
+    binary: tablon
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+      - -tags=embed
+    ldflags:
+      - -s -w
+      - -X github.com/pablogtrz/tablon/internal/version.Version={{ .Version }}
+      - -X github.com/pablogtrz/tablon/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/pablogtrz/tablon/internal/version.Date={{ .CommitDate }}
+
+archives:
+  - id: bundle
+    ids:
+      - tablond
+      - tablon
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - docs/self-hosting.md
+
+  - id: cli
+    ids:
+      - tablon
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      tablon-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - '^merge:'
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Performance
+      regexp: '^perf'
+      order: 2
+    - title: Other changes
+      order: 999
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: 'Tablon {{ .Version }}'

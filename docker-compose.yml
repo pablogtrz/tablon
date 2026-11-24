@@ -1,0 +1,43 @@
+services:
+  tablon:
+    build:
+      context: .
+      args:
+        VERSION: ${TABLON_VERSION:-dev}
+        COMMIT: ${TABLON_COMMIT:-unknown}
+        DATE: ${TABLON_BUILD_DATE:-unknown}
+    image: ghcr.io/pablogtrz/tablon:${TABLON_VERSION:-dev}
+    container_name: tablon
+    ports:
+      - "127.0.0.1:${TABLON_HOST_PORT:-8448}:8448"
+    volumes:
+      - tablon-data:/data
+    environment:
+      TABLON_HOST: 0.0.0.0
+      TABLON_PORT: 8448
+      TABLON_DATA_DIR: /data
+      TABLON_API_TOKEN: ${TABLON_API_TOKEN:-}
+      TABLON_IDLE_ENABLED: ${TABLON_IDLE_ENABLED:-true}
+      TABLON_IDLE_TIMEOUT: ${TABLON_IDLE_TIMEOUT:-5m}
+      TABLON_LOG_LEVEL: ${TABLON_LOG_LEVEL:-info}
+      TMPDIR: /tmp
+      HOME: /tmp
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8448/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  tablon-data:
+    name: tablon-data

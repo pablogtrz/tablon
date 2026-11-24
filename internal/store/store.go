@@ -66,6 +66,21 @@ func (s *Store) Path() string {
 	return s.path
 }
 
+// EnterIdle releases the SQLite page cache and the idle writer connection.
+// The database stays open and becomes available again on the next query.
+func (s *Store) EnterIdle(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `PRAGMA shrink_memory`); err != nil {
+		return err
+	}
+	s.db.SetMaxIdleConns(0)
+	return nil
+}
+
+// ExitIdle restores the single idle writer connection used by the store.
+func (s *Store) ExitIdle() {
+	s.db.SetMaxIdleConns(1)
+}
+
 func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }

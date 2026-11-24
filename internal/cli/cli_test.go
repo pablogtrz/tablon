@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/pablogtrz/tablon/internal/version"
 )
 
 type fakeAPI struct {
@@ -300,6 +302,47 @@ func TestExitCodesAndUsage(t *testing.T) {
 	}
 	if code, out, _ := run([]string{"--help"}, nil, ""); code != 0 || !strings.Contains(out, "tablon") {
 		t.Fatalf("help code = %d out = %q", code, out)
+	}
+	if code, out, _ := run([]string{"--version"}, nil, ""); code != 0 || !strings.Contains(out, "tablon dev") {
+		t.Fatalf("version code = %d out = %q", code, out)
+	}
+	code, out, _ := run([]string{"version", "--json"}, nil, "")
+	if code != 0 {
+		t.Fatalf("version json code = %d", code)
+	}
+	var info map[string]string
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("version json: %v (%q)", err, out)
+	}
+	if info["version"] == "" || info["commit"] == "" || info["date"] == "" {
+		t.Fatalf("version fields = %#v", info)
+	}
+}
+
+func TestVersionInjected(t *testing.T) {
+	oldVersion, oldCommit, oldDate := version.Version, version.Commit, version.Date
+	t.Cleanup(func() {
+		version.Version, version.Commit, version.Date = oldVersion, oldCommit, oldDate
+	})
+	version.Version, version.Commit, version.Date = "1.2.3", "abc123", "2026-11-24T10:00:00Z"
+
+	_, run := newFake(t)
+
+	code, out, _ := run([]string{"--version"}, nil, "")
+	if code != 0 || !strings.Contains(out, "tablon 1.2.3") || !strings.Contains(out, "abc123") {
+		t.Fatalf("version code = %d out = %q", code, out)
+	}
+
+	code, out, _ = run([]string{"version", "--json"}, nil, "")
+	if code != 0 {
+		t.Fatalf("version json code = %d", code)
+	}
+	var info map[string]string
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatalf("version json: %v (%q)", err, out)
+	}
+	if info["version"] != "1.2.3" || info["commit"] != "abc123" || info["date"] != "2026-11-24T10:00:00Z" {
+		t.Fatalf("version fields = %#v", info)
 	}
 }
 

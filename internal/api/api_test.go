@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/pablogtrz/tablon/internal/api"
 	"github.com/pablogtrz/tablon/internal/config"
 	"github.com/pablogtrz/tablon/internal/events"
+	"github.com/pablogtrz/tablon/internal/idle"
 	"github.com/pablogtrz/tablon/internal/service"
 	"github.com/pablogtrz/tablon/internal/store"
 )
@@ -23,7 +25,15 @@ type testAPI struct {
 	srv *httptest.Server
 }
 
-func newTestAPI(t *testing.T, token string) *testAPI {
+func newTestAPI(t testing.TB, token string) *testAPI {
+	return newTestAPIWithAssets(t, token, nil)
+}
+
+func newTestAPIWithAssets(t testing.TB, token string, assets fs.FS) *testAPI {
+	return newTestAPIWithIdle(t, token, assets, nil)
+}
+
+func newTestAPIWithIdle(t testing.TB, token string, assets fs.FS, idleCtl *idle.Controller) *testAPI {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	if err != nil {
@@ -41,12 +51,12 @@ func newTestAPI(t *testing.T, token string) *testAPI {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	hub := events.NewHub(logger)
 	t.Cleanup(hub.Close)
-	srv := httptest.NewServer(api.New(cfg, service.New(st, hub), hub, logger))
+	srv := httptest.NewServer(api.New(cfg, service.New(st, hub), hub, idleCtl, logger, assets, nil))
 	t.Cleanup(srv.Close)
 	return &testAPI{srv: srv}
 }
 
-func (a *testAPI) do(t *testing.T, method, path string, body any, headers map[string]string) (int, []byte) {
+func (a *testAPI) do(t testing.TB, method, path string, body any, headers map[string]string) (int, []byte) {
 	t.Helper()
 	var reader io.Reader
 	if body != nil {
@@ -78,7 +88,7 @@ func (a *testAPI) do(t *testing.T, method, path string, body any, headers map[st
 	return res.StatusCode, raw
 }
 
-func decode[T any](t *testing.T, body []byte) T {
+func decode[T any](t testing.TB, body []byte) T {
 	t.Helper()
 	var value T
 	if err := json.Unmarshal(body, &value); err != nil {

@@ -43,6 +43,12 @@
     void loadStatus()
   }
 
+  function idleTimeoutLabel(seconds: number): string {
+    if (!seconds) return 'Off'
+    if (seconds % 60 === 0) return `${seconds / 60} min`
+    return `${seconds}s`
+  }
+
   onMount(() => {
     void loadStatus()
   })
@@ -75,13 +81,29 @@
         </div>
         <div class="flex items-center justify-between gap-3">
           <dt class="text-[var(--text-3)]">Database</dt>
-          <dd class="text-[var(--text-2)]">{status.database}</dd>
+          <dd class="text-[var(--text-2)]">{status.database === 'idle' ? 'Idle, not checked' : status.database}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-[var(--text-3)]">Activity</dt>
+          <dd class="text-[var(--text-2)]">
+            {status.idle.enabled ? (status.idle.state === 'idle' ? 'Idle' : 'Active') : 'Idle mode off'}
+          </dd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-[var(--text-3)]">Idle after</dt>
+          <dd class="text-[var(--text-2)]">{idleTimeoutLabel(status.idle.timeout_seconds)}</dd>
         </div>
         <div class="flex items-center justify-between gap-3">
           <dt class="text-[var(--text-3)]">Auth</dt>
           <dd class="text-[var(--text-2)]">{status.auth_enabled ? 'Enabled' : 'Optional, currently off'}</dd>
         </div>
       </dl>
+      <a
+        class="mt-3 inline-flex rounded-lg text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        href="/openapi.yaml"
+        target="_blank"
+        rel="noreferrer"
+      >OpenAPI contract</a>
     {:else if error}
       <p class="mt-3 text-xs text-destructive" role="alert">{error}</p>
     {/if}

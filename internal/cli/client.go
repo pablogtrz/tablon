@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pablogtrz/tablon/internal/version"
 )
 
 const maxResponseBytes = 10 << 20
@@ -40,7 +42,7 @@ type Client struct {
 func NewClient(baseURL, token string, timeout time.Duration) (*Client, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:8080"
+		baseURL = "http://127.0.0.1:8448"
 	}
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
@@ -58,7 +60,7 @@ func NewClient(baseURL, token string, timeout time.Duration) (*Client, error) {
 	return &Client{
 		baseURL:   parsed,
 		token:     strings.TrimSpace(token),
-		userAgent: "tablon-cli/" + Version,
+		userAgent: "tablon-cli/" + version.Version,
 		http:      &http.Client{Timeout: timeout},
 	}, nil
 }

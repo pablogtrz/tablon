@@ -16,9 +16,6 @@ import (
 	"github.com/pablogtrz/tablon/internal/domain"
 )
 
-// Version is set with -ldflags at release time.
-var Version = "dev"
-
 type globals struct {
 	url      string
 	urlSet   bool
@@ -27,6 +24,7 @@ type globals struct {
 	timeout  string
 	json     bool
 	compact  bool
+	version  bool
 }
 
 type usageError struct {
@@ -51,12 +49,20 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		fmt.Fprintln(stderr, "tablon:", err)
 		return 2
 	}
+	if g.version {
+		_ = printVersion(stdout, g.json)
+		return 0
+	}
 	if len(rest) == 0 || rest[0] == "-h" || rest[0] == "--help" {
 		printGlobalHelp(stdout)
 		return 0
 	}
 	if rest[0] == "help" {
 		printGroupHelp(stdout, rest[1:])
+		return 0
+	}
+	if rest[0] == "version" {
+		_ = printVersion(stdout, g.json)
 		return 0
 	}
 
@@ -118,6 +124,8 @@ func parseGlobals(args []string) (globals, []string, error) {
 			g.json = true
 		case arg == "--compact":
 			g.compact = true
+		case arg == "--version":
+			g.version = true
 		case arg == "--":
 			rest = append(rest, args[i+1:]...)
 			return validateGlobals(g, rest)
@@ -306,16 +314,17 @@ func printGlobalHelp(w io.Writer) {
 	fmt.Fprint(w, `tablon - lightweight CLI for Tablon
 
 Usage:
-  tablon [--json|--compact] [--url URL] [--token TOKEN] [--timeout DURATION] <command> [flags]
+  tablon [--json|--compact] [--version] [--url URL] [--token TOKEN] [--timeout DURATION] <command> [flags]
 
 Commands:
   project   list, get, create, update
   epic      list, get, create, update
   issue     list, get, create, update, comments, comment, claim, release
   comment   update, delete
+  version   print build version
 
 Environment:
-  TABLON_CLI_URL    default http://127.0.0.1:8080
+  TABLON_CLI_URL    default http://127.0.0.1:8448
   TABLON_CLI_TOKEN  optional bearer token
 
 Output:

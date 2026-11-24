@@ -1,0 +1,1351 @@
+openapi: 3.0.3
+info:
+  title: Tablon API
+  version: 0.1.0
+  description: |
+    REST and SSE API for Tablon, a lightweight issue tracker for humans and
+    coding agents. The API is single-user. Authentication is optional; when
+    `TABLON_API_TOKEN` is set, all `/api/v1` requests must include a bearer token.
+servers:
+  - url: /
+security:
+  - {}
+  - bearerAuth: []
+tags:
+  - name: System
+    description: Health, readiness, version and API contract.
+  - name: Projects
+    description: Projects and their identifiers.
+  - name: Epics
+    description: Epics inside a project.
+  - name: Issues
+    description: Issues, status changes, claims and releases.
+  - name: Comments
+    description: Markdown comments on issues.
+  - name: Events
+    description: Server-sent events for live project updates.
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Liveness probe
+      description: Public liveness check. It does not touch the database and does not reset idle mode.
+      security: []
+      responses:
+        '200':
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /ready:
+    get:
+      tags: [System]
+      operationId: getReady
+      summary: Readiness probe
+      description: Public database readiness check. It may open a SQLite connection and is not used by the default Docker healthcheck.
+      security: []
+      responses:
+        '200':
+          description: The database is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+        '503':
+          $ref: '#/components/responses/NotReady'
+
+  /openapi.yaml:
+    get:
+      tags: [System]
+      operationId: getOpenAPISpec
+      summary: OpenAPI contract
+      description: The machine-readable contract served by this server.
+      security: []
+      responses:
+        '200':
+          description: OpenAPI 3.0.3 YAML.
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/v1/system/status:
+    get:
+      tags: [System]
+      operationId: getSystemStatus
+      summary: System status
+      description: Version, auth, database and idle state. This endpoint does not reset idle mode.
+      responses:
+        '200':
+          description: Current system status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+              example:
+                version: 0.1.0
+                auth_enabled: false
+                database: ok
+                idle:
+                  enabled: true
+                  state: active
+                  timeout_seconds: 300
+                  last_activity: '2026-11-24T10:00:00Z'
+                  idle_since: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List projects
+      parameters:
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: Projects ordered by creation date, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+              example:
+                items:
+                  - id: 01a20a51-31ec-73eb-b322-d0f6f3640534
+                    identifier: TABLON
+                    name: Tablon
+                    description: Lightweight issue tracking.
+                    status: active
+                    logo_gradient: 5
+                    logo_emoji: '🧭'
+                    created_at: '2026-11-23T21:30:23.084258Z'
+                    updated_at: '2026-11-24T09:08:07.572562Z'
+                    epic_count: 5
+                    issue_count: 38
+                    done_count: 16
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectRef}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectRef'
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: Get a project
+      responses:
+        '200':
+          description: Project details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      summary: Update a project
+      description: Last write wins. The identifier is immutable; sending it with the current value is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Updated project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      summary: Delete a project
+      description: Cascades to the project's epics, issues and comments.
+      responses:
+        '204':
+          description: Project deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectRef}/epics:
+    parameters:
+      - $ref: '#/components/parameters/ProjectRef'
+    get:
+      tags: [Epics]
+      operationId: listEpics
+      summary: List epics
+      description: Epics are ordered by creation date, newest first.
+      responses:
+        '200':
+          description: Project epics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpicList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Epics]
+      operationId: createEpic
+      summary: Create an epic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEpicRequest'
+      responses:
+        '201':
+          description: Epic created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Epic'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/epics/{epicRef}:
+    parameters:
+      - $ref: '#/components/parameters/EpicRef'
+    get:
+      tags: [Epics]
+      operationId: getEpic
+      summary: Get an epic
+      responses:
+        '200':
+          description: Epic details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Epic'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Epics]
+      operationId: updateEpic
+      summary: Update an epic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEpicRequest'
+      responses:
+        '200':
+          description: Updated epic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Epic'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Epics]
+      operationId: deleteEpic
+      summary: Delete an epic
+      description: Issues in the epic are kept and their epic assignment is cleared.
+      responses:
+        '204':
+          description: Epic deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectRef}/issues:
+    parameters:
+      - $ref: '#/components/parameters/ProjectRef'
+    get:
+      tags: [Issues]
+      operationId: listIssues
+      summary: List issues
+      description: Cursor pagination. Default limit 50, maximum 200.
+      parameters:
+        - $ref: '#/components/parameters/IssueStatusFilter'
+        - $ref: '#/components/parameters/PriorityFilter'
+        - $ref: '#/components/parameters/EpicIDFilter'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Order'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of issues.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuePage'
+              example:
+                items:
+                  - id: 01a20a51-320b-7a6b-8197-e47fca889efb
+                    identifier: TABLON-25
+                    project_id: 01a20a51-31ec-73eb-b322-d0f6f3640534
+                    epic_id: 01a20a51-31f0-723a-8b2a-5e8d12aec8b0
+                    title: Idle mode
+                    description: Activity gate and best-effort idle state.
+                    status: backlog
+                    priority: high
+                    agent_id: null
+                    created_at: '2026-11-23T21:30:23.115679Z'
+                    updated_at: '2026-11-24T09:52:12.812718Z'
+                next_cursor: eyJ2IjoiMjAyNi0xMS0yNFQwOTo1MjoxMi44MTI3MThaIiwiaWQiOiIwMWEyMGE1MS0zMjBiLTdhNmItODE5Ny1lNDdmY2E4ODllZmIifQ
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Issues]
+      operationId: createIssue
+      summary: Create an issue
+      description: Supports `Idempotency-Key` for safe retries.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIssueRequest'
+      responses:
+        '201':
+          description: Issue created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/issues/{issueRef}:
+    parameters:
+      - $ref: '#/components/parameters/IssueRef'
+    get:
+      tags: [Issues]
+      operationId: getIssue
+      summary: Get an issue
+      responses:
+        '200':
+          description: Issue details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Issues]
+      operationId: updateIssue
+      summary: Update an issue
+      description: "Last write wins. Send `epic_id: null` to clear the epic."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateIssueRequest'
+      responses:
+        '200':
+          description: Updated issue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Issues]
+      operationId: deleteIssue
+      summary: Delete an issue
+      description: Cascades to the issue's comments.
+      responses:
+        '204':
+          description: Issue deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/issues/{issueRef}/status:
+    parameters:
+      - $ref: '#/components/parameters/IssueRef'
+    patch:
+      tags: [Issues]
+      operationId: updateIssueStatus
+      summary: Change issue status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueStatusRequest'
+      responses:
+        '200':
+          description: Updated issue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/issues/{issueRef}/claim:
+    parameters:
+      - $ref: '#/components/parameters/IssueRef'
+    post:
+      tags: [Issues]
+      operationId: claimIssue
+      summary: Claim an issue
+      description: Cooperative claim. Returns 409 when another agent already owns the issue.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRequest'
+      responses:
+        '200':
+          description: Issue claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/issues/{issueRef}/release:
+    parameters:
+      - $ref: '#/components/parameters/IssueRef'
+    post:
+      tags: [Issues]
+      operationId: releaseIssue
+      summary: Release an issue
+      description: The agent id must match the current owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRequest'
+      responses:
+        '200':
+          description: Issue released.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/issues/{issueRef}/comments:
+    parameters:
+      - $ref: '#/components/parameters/IssueRef'
+    get:
+      tags: [Comments]
+      operationId: listComments
+      summary: List comments
+      description: Chronological order. Default limit 50, maximum 200.
+      parameters:
+        - $ref: '#/components/parameters/CommentLimit'
+        - $ref: '#/components/parameters/CommentCursor'
+      responses:
+        '200':
+          description: A page of comments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Comments]
+      operationId: createComment
+      summary: Create a comment
+      description: Supports `Idempotency-Key` for safe retries.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '201':
+          description: Comment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/comments/{commentRef}:
+    parameters:
+      - $ref: '#/components/parameters/CommentRef'
+    patch:
+      tags: [Comments]
+      operationId: updateComment
+      summary: Update a comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+      responses:
+        '200':
+          description: Updated comment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Comments]
+      operationId: deleteComment
+      summary: Delete a comment
+      responses:
+        '204':
+          description: Comment deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectRef}/events:
+    parameters:
+      - $ref: '#/components/parameters/ProjectRef'
+    get:
+      tags: [Events]
+      operationId: subscribeProjectEvents
+      summary: Stream project events
+      description: |
+        Server-sent events for one project. Event types are `issue.created`,
+        `issue.updated`, `issue.deleted`, `issue.claimed`, `issue.released`,
+        `comment.created`, `comment.updated` and `comment.deleted`. Heartbeats
+        are comments (`: ping`). There is no replay in v0.1; reconnect and refetch.
+      responses:
+        '200':
+          description: SSE stream.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            X-Accel-Buffering:
+              schema:
+                type: string
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                retry: 3000
+
+                event: issue.updated
+                data: {"type":"issue.updated","project_id":"01a20a51-31ec-73eb-b322-d0f6f3640534","issue_id":"01a20a51-320b-7a6b-8197-e47fca889efb","identifier":"TABLON-25","updated_at":"2026-11-24T10:00:00Z"}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Optional bearer token set with `TABLON_API_TOKEN`.
+
+  parameters:
+    ProjectRef:
+      name: projectRef
+      in: path
+      required: true
+      description: Project UUID or immutable project identifier.
+      schema:
+        type: string
+    EpicRef:
+      name: epicRef
+      in: path
+      required: true
+      description: Epic UUID.
+      schema:
+        type: string
+    IssueRef:
+      name: issueRef
+      in: path
+      required: true
+      description: Issue UUID or issue identifier such as `PROJ-123`.
+      schema:
+        type: string
+    CommentRef:
+      name: commentRef
+      in: path
+      required: true
+      description: Comment UUID.
+      schema:
+        type: string
+    IncludeArchived:
+      name: include_archived
+      in: query
+      required: false
+      description: Include archived projects.
+      schema:
+        type: boolean
+        default: false
+    IssueStatusFilter:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/IssueStatus'
+    PriorityFilter:
+      name: priority
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/Priority'
+    EpicIDFilter:
+      name: epic_id
+      in: query
+      required: false
+      description: Epic UUID. `epic` is accepted as an alias.
+      schema:
+        type: string
+    Search:
+      name: q
+      in: query
+      required: false
+      description: Case-insensitive search in title and description.
+      schema:
+        type: string
+        maxLength: 200
+    Sort:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [created_at, updated_at, identifier, priority]
+        default: created_at
+    Order:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    CommentLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    CommentCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: 1-128 visible characters. Replaying the same key and body returns the stored response; a different body is a conflict.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Invalid query parameters or request body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: invalid_json
+              message: 'invalid character ''x'' looking for beginning of value'
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: unauthorized
+              message: missing or invalid bearer token
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: not_found
+              message: resource not found
+    Conflict:
+      description: Resource state conflicts with the request, such as a claimed issue or a reused idempotency key with a different body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: conflict
+              message: resource state conflicts with the request
+    RequestTooLarge:
+      description: Request body exceeds 1 MiB.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: request_too_large
+              message: request body is too large
+    ValidationError:
+      description: A field failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: validation_error
+              message: 'title must be at most 200 characters'
+              details:
+                field: title
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: internal_error
+              message: internal server error
+    NotReady:
+      description: The database is not ready.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: not_ready
+              message: database is not ready
+
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Ready:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+
+    SystemStatus:
+      type: object
+      required: [version, auth_enabled, database, idle]
+      properties:
+        version:
+          type: string
+          example: 0.1.0
+        auth_enabled:
+          type: boolean
+        database:
+          type: string
+          enum: [ok, unavailable, idle]
+        idle:
+          $ref: '#/components/schemas/SystemIdle'
+
+    SystemIdle:
+      type: object
+      required: [enabled, state, timeout_seconds, last_activity, idle_since]
+      properties:
+        enabled:
+          type: boolean
+        state:
+          type: string
+          enum: [active, idle]
+        timeout_seconds:
+          type: integer
+          minimum: 0
+        last_activity:
+          type: string
+          format: date-time
+        idle_since:
+          type: string
+          format: date-time
+          nullable: true
+
+    ProjectStatus:
+      type: string
+      enum: [planning, active, archived, done]
+
+    EpicStatus:
+      type: string
+      enum: [backlog, in-progress, done]
+
+    IssueStatus:
+      type: string
+      enum: [backlog, todo, in-progress, in-review, done, canceled]
+
+    Priority:
+      type: string
+      enum: [urgent, high, medium, low, none]
+
+    Project:
+      type: object
+      required: [id, identifier, name, description, status, logo_gradient, logo_emoji, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        identifier:
+          type: string
+          pattern: '^[A-Z][A-Z0-9]{1,9}$'
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        logo_gradient:
+          type: integer
+          minimum: 0
+          maximum: 7
+        logo_emoji:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectListItem:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          required: [epic_count, issue_count, done_count]
+          properties:
+            epic_count:
+              type: integer
+              minimum: 0
+            issue_count:
+              type: integer
+              minimum: 0
+            done_count:
+              type: integer
+              minimum: 0
+
+    ProjectList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectListItem'
+
+    Epic:
+      type: object
+      required: [id, project_id, title, description, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/EpicStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EpicList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Epic'
+
+    Issue:
+      type: object
+      required: [id, identifier, project_id, epic_id, title, description, status, priority, agent_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        identifier:
+          type: string
+          example: TABLON-25
+        project_id:
+          type: string
+        epic_id:
+          type: string
+          nullable: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/IssueStatus'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        agent_id:
+          type: string
+          nullable: true
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    IssuePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Issue'
+        next_cursor:
+          type: string
+
+    Comment:
+      type: object
+      required: [id, issue_id, content, agent_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        issue_id:
+          type: string
+        content:
+          type: string
+          maxLength: 20000
+        agent_id:
+          type: string
+          nullable: true
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CommentPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        next_cursor:
+          type: string
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        identifier:
+          type: string
+          description: Optional 2-10 character identifier starting with a letter. Generated from the name when omitted.
+          pattern: '^[A-Za-z][A-Za-z0-9]{1,9}$'
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        logo_gradient:
+          type: integer
+          minimum: 0
+          maximum: 7
+        logo_emoji:
+          type: string
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: Must match the current identifier; it is immutable.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        logo_gradient:
+          type: integer
+          minimum: 0
+          maximum: 7
+        logo_emoji:
+          type: string
+
+    CreateEpicRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/EpicStatus'
+
+    UpdateEpicRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/EpicStatus'
+
+    CreateIssueRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/IssueStatus'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        epic_id:
+          type: string
+          nullable: true
+        agent_id:
+          type: string
+          maxLength: 100
+
+    UpdateIssueRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 20000
+        status:
+          $ref: '#/components/schemas/IssueStatus'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        epic_id:
+          type: string
+          nullable: true
+
+    IssueStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/IssueStatus'
+
+    AgentRequest:
+      type: object
+      required: [agent_id]
+      properties:
+        agent_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    CreateCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        agent_id:
+          type: string
+          maxLength: 100
+
+    UpdateCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000

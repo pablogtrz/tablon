@@ -23,6 +23,10 @@ Tablon is an open-source, lightweight, AI-first issue tracker: a Linear alternat
 | Writing agent instructions for target repos, CLI workflow | `agent-instructions/AGENTS.md` |
 | Project overview, stack and license | `README.md` |
 | Product scope, decisions and contracts | `docs/product/build-brief.md` |
+| API contract, endpoints and schemas | `docs/api/openapi.yaml` |
+| Self-hosting, reverse proxy, backup, upgrade | `docs/self-hosting.md` |
+| Performance method and measured results | `docs/performance.md` |
+| Tagging, artifacts and release runbook | `docs/release.md` |
 | Architecture and data model | `docs/architecture.md` (planned) |
 
 Add new docs to this index. Keep each doc short and focused; link instead of repeating.
@@ -30,26 +34,42 @@ Add new docs to this index. Keep each doc short and focused; link instead of rep
 ## Repo map
 
 - Go module: `github.com/pablogtrz/tablon`.
+- `assets.go` — `go:embed` for `frontend/dist` and the OpenAPI spec.
 - `frontend/` — Svelte 5 + TypeScript + Vite + Tailwind v4.
 - `cmd/server/`, `cmd/tablon/`, `internal/` — Go server and CLI.
 - `migrations/` — SQLite migrations.
-- `docs/` — agent docs.
+- `docs/` — agent docs; `docs/api/` holds the OpenAPI contract.
+- `scripts/` — benchmark and smoke-test helpers.
+- `.github/workflows/` — CI and release automation.
+- `Dockerfile`, `docker-compose.yml`, `.env.example` — self-hosting.
 - `agent-instructions/` — distributable `AGENTS.md` template for target repos.
 - `data/` — runtime database (gitignored).
 
 ## Commands
 
 ```bash
-cd frontend && pnpm dev      # dev server, proxies /api to :8080
-cd frontend && pnpm check    # types + lint
+cd frontend && pnpm dev      # dev server, proxies /api to :8448
+cd frontend && pnpm check    # types + Svelte diagnostics
 cd frontend && pnpm test     # unit tests
-cd frontend && pnpm build    # static assets
-go run ./cmd/server          # API on 127.0.0.1:8080
+cd frontend && pnpm test:e2e # Chromium, Firefox and WebKit
+cd frontend && pnpm build    # static assets for go:embed
+go run ./cmd/server          # API on 127.0.0.1:8448; pair with Vite
 go run ./cmd/tablon --help   # CLI
 go test ./...                # backend + CLI tests
-go test ./...                # backend + CLI tests
+go vet ./...
+go test -race ./...
+./scripts/bench.sh           # startup/RSS/latency measurements
 docker compose up --build    # container
 ```
+
+A release/Docker binary needs `pnpm --dir frontend build` and `-tags embed`:
+
+```bash
+pnpm --dir frontend build
+go build -tags embed -o bin/tablond ./cmd/server
+```
+
+`go test ./...` uses the empty `!embed` stub and works on a clean clone.
 
 ## Working style
 

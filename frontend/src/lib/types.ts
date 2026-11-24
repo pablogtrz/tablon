@@ -130,8 +130,17 @@ export interface Page<T> {
   next_cursor?: string
 }
 
+export interface SystemIdleStatus {
+  enabled: boolean
+  state: 'active' | 'idle'
+  timeout_seconds: number
+  last_activity: string
+  idle_since: string | null
+}
+
 export interface SystemStatus {
   version: string
   auth_enabled: boolean
   database: string
+  idle: SystemIdleStatus
 }

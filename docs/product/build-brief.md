@@ -1,6 +1,6 @@
 # Tablon v0.1 — build brief
 
-**Status:** recorded 2026-11-23. M1 and M1.1 implemented and committed.
+**Status:** recorded 2026-11-23. M1, M1.1, M2 and M3 implemented; first tagged release pending review/approval.
 **Filter:** "REMEMBER THE MAIN GOAL IS TO HAVE A EXTREMELLY LIGHTWEIGHT PRODUCT MANAGEMENT TOOL" (user, 2026-11-23).
 
 ## Brief (user's words)
@@ -228,3 +228,36 @@ Known limits:
 - No split editor/preview pane yet.
 - Fenced code blocks have language labels but no language-specific syntax highlighting.
 - CodeMirror adds about 287 kB raw to the lazy IssueView chunk; the initial bundle is unchanged.
+
+
+## M3 checkpoint — 2026-11-24
+
+Delivered:
+
+- One-binary server: `go:embed` SPA behind `-tags embed`, an empty `!embed` stub for development/tests, SPA history fallback, hashed asset caching, security headers/CSP, public `/openapi.yaml`, and a clear 503 when the SPA is absent.
+- Idle mode: `TABLON_IDLE_ENABLED` and `TABLON_IDLE_TIMEOUT`, an activity gate around meaningful `/api/v1` traffic, in-flight tracking, SSE-aware behavior, `PRAGMA shrink_memory`, idle writer release, status fields and Settings rows.
+- OpenAPI 3.0.3 contract in `docs/api/openapi.yaml`, embedded and served at `/openapi.yaml`, with route-table and schema contract tests using a test-only kin-openapi dependency.
+- Docker: multi-stage Alpine image, non-root UID/GID 10001, read-only root, cap drop, `/data` named volume, `/health` healthcheck, OCI labels; Compose loopback defaults; `.env.example`; no Node runtime.
+- CI: backend tests/vet/race/migrations/benchmark compile, frontend check/test/build, Playwright Chromium/Firefox/WebKit, embedded binary smoke, Docker smoke, five-target cross-builds and GoReleaser config check.
+- Release: `internal/version` ldflags, `tablond --version`, `tablon version`/`--version`, GoReleaser bundle (server + CLI) and CLI-only archives, `SHA256SUMS`, grouped notes, multi-arch GHCR image with SBOM/provenance.
+- Benchmarks: store/API benchmarks, query-plan assertions, `scripts/bench.sh`, and recorded results in `docs/performance.md`.
+- Self-hosting and release docs: `docs/self-hosting.md`, `docs/release.md`, README quick starts, AGENTS index, browser install and smoke instructions.
+
+Verified:
+
+- `go test ./...`, `go vet ./...`, `go test -race ./...`, `go test -tags embed ./...`.
+- `pnpm check`, `pnpm test` (40 tests), `pnpm build`, and Playwright (Chromium 8 passed; Firefox/WebKit 7 passed + 1 Chromium-only skip each).
+- `go build -tags embed`; `scripts/ci-smoke.sh` (embedded SPA, deep links, OpenAPI, auth, JSON 404s).
+- `go test ./...` with `frontend/dist` removed (empty `!embed` stub), then embedded smoke again.
+- `goreleaser check`, `goreleaser build --snapshot --clean`, and `goreleaser release --snapshot --clean` (10 archives + `SHA256SUMS`; versions injected).
+- `docker compose config`.
+- `scripts/bench.sh`: startup 0.06-0.08 s, RSS 9.0-9.3 MB at start, 12.8-12.9 MB after workload, 13.0-14.0 MB idle, first request after idle 0.030-0.036 s; binary 11.9 MB.
+- Raspberry Pi 4 arm64: Docker image built on the Pi, Compose healthy with the real local database (3 projects, 6 epics, 42 issues, 21 comments), persisted across restart, read-only/non-root/no-Node hardening verified, SPA/deep links/OpenAPI served, idle status observed. Native benchmark: startup 0.160-0.162 s, RSS 10.4-10.6 MB at start, 14.5-14.6 MB after workload, 14.7-14.8 MB idle, first request after idle 0.102-0.103 s. Image 31.9 MB; container process RSS 10.4 MB idle / 11.1 MB active.
+
+Known limits:
+
+- The Docker image was built and smoke-tested on the Raspberry Pi 4 arm64; the local Mac Docker daemon was unavailable. The CI `docker` job remains the repeatable check.
+- Idle mode does not materially reduce RSS at this workload. Forced `debug.FreeOSMemory` was removed after it increased RSS; the activity gate is the durable part.
+- Release artifacts were verified with a snapshot only; the first tagged release and GHCR push remain pending review/approval.
+- A server binary without `-tags embed` serves the API but not the SPA.
+- Benchmark figures are from one machine; use `-count` and medians before treating them as gates.
