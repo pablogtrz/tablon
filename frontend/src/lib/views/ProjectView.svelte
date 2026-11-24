@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import Pencil from '@lucide/svelte/icons/pencil'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash2 from '@lucide/svelte/icons/trash-2'
@@ -10,16 +10,21 @@
   import EpicFormModal from '$lib/components/tablon/EpicFormModal.svelte'
   import EpicList from '$lib/components/tablon/EpicList.svelte'
   import IdChip from '$lib/components/tablon/IdChip.svelte'
+  import IssueBoard from '$lib/components/tablon/IssueBoard.svelte'
   import IssueCreateModal from '$lib/components/tablon/IssueCreateModal.svelte'
   import IssueList from '$lib/components/tablon/IssueList.svelte'
   import ProjectLogo from '$lib/components/tablon/ProjectLogo.svelte'
   import ProjectSettingsModal from '$lib/components/tablon/ProjectSettingsModal.svelte'
   import ProjectStatusBadge from '$lib/components/tablon/ProjectStatusBadge.svelte'
-  import { deleteEpic, deleteProject, getProject, listEpics, listIssues } from '$lib/api'
+  import { deleteEpic, deleteProject, getProject, listAllIssues, listEpics, listIssues, updateIssueStatus } from '$lib/api'
+  import { applyBoardMove } from '$lib/board'
+  import { subscribeProjectEvents } from '$lib/events'
+  import type { ProjectEvent } from '$lib/events'
+  import type { HiddenBoardStatus } from '$lib/board'
   import { messageOf } from '$lib/errors'
   import { relativeTime } from '$lib/format'
   import { issuePath, navigate } from '$lib/router.svelte'
-  import type { Epic, Issue, Project } from '$lib/types'
+  import type { Epic, Issue, IssueStatus, Project } from '$lib/types'
 
   let { projectRef }: { projectRef: string } = $props()
 
@@ -31,9 +36,17 @@
   let heading = $state<HTMLHeadingElement>()
   let focusPending = true
 
-  let tab = $state<'issues' | 'epics'>('issues')
+  let tab = $state<'issues' | 'board' | 'epics'>('issues')
   let issuesLoading = $state(false)
   let issuesError = $state('')
+
+  let boardIssues = $state<Issue[]>([])
+  let boardLoading = $state(false)
+  let boardError = $state('')
+  let boardTruncated = $state(false)
+  let movingIssueIds = $state<string[]>([])
+  let liveMessage = $state('')
+  let eventTimer: ReturnType<typeof setTimeout> | null = null
 
   let statusFilter = $state('')
   let priorityFilter = $state('')
@@ -96,6 +109,128 @@
       issuesLoading = false
     }
   }
+
+  async function loadBoard() {
+    boardLoading = true
+    boardError = ''
+    try {
+      const result = await listAllIssues(apiRef)
+      boardIssues = result.items
+      boardTruncated = result.truncated
+    } catch (err) {
+      boardError = messageOf(err)
+    } finally {
+      boardLoading = false
+    }
+  }
+
+  async function moveBoardIssue(issue: Issue, status: IssueStatus): Promise<boolean> {
+    if (movingIssueIds.includes(issue.id)) return false
+    const previous = boardIssues
+    const previousIssue = boardIssues.find((item) => item.id === issue.id) ?? issue
+    const optimistic = applyBoardMove(boardIssues, issue.id, status)
+    if (optimistic === previous) return true
+
+    boardIssues = optimistic
+    boardError = ''
+    movingIssueIds = [...movingIssueIds, issue.id]
+    try {
+      const updated = await updateIssueStatus(issue.identifier, status)
+      boardIssues = boardIssues.map((item) => (item.id === updated.id ? updated : item))
+      return true
+    } catch (err) {
+      boardIssues = boardIssues.map((item) => (item.id === issue.id ? previousIssue : item))
+      boardError = messageOf(err)
+      return false
+    } finally {
+      movingIssueIds = movingIssueIds.filter((id) => id !== issue.id)
+    }
+  }
+
+  function selectTab(next: 'issues' | 'board' | 'epics') {
+    tab = next
+    if (next === 'board') {
+      void loadBoard()
+    } else if (next === 'issues') {
+      void loadIssues()
+    }
+  }
+
+  function showHidden(status: HiddenBoardStatus) {
+    statusFilter = status
+    tab = 'issues'
+    void loadIssues()
+  }
+
+  function openBoardIssue(issue: Issue) {
+    navigate(issuePath(apiRef, issue.identifier))
+  }
+
+  function scheduleRefresh() {
+    if (eventTimer) clearTimeout(eventTimer)
+    eventTimer = setTimeout(() => {
+      eventTimer = null
+      if (tab === 'board') {
+        void loadBoard()
+      } else {
+        void loadIssues()
+      }
+    }, 150)
+  }
+
+  async function announceEvent(event: ProjectEvent) {
+    if (typeof document !== 'undefined' && document.hidden) return
+    const label = event.identifier ?? 'issue'
+    let message = ''
+    switch (event.type) {
+      case 'issue.created':
+        message = `Issue ${label} created`
+        break
+      case 'issue.updated':
+        message = `Issue ${label} updated`
+        break
+      case 'issue.deleted':
+        message = `Issue ${label} deleted`
+        break
+      case 'issue.claimed':
+        message = `Issue ${label} claimed`
+        break
+      case 'issue.released':
+        message = `Issue ${label} released`
+        break
+      case 'comment.created':
+        message = `New comment on ${label}`
+        break
+      case 'comment.updated':
+        message = `Comment updated on ${label}`
+        break
+      case 'comment.deleted':
+        message = `Comment deleted on ${label}`
+        break
+    }
+    if (!message) return
+    liveMessage = ''
+    await tick()
+    liveMessage = message
+  }
+
+  $effect(() => {
+    if (!project) return
+    const dispose = subscribeProjectEvents(project.identifier, {
+      onsync: scheduleRefresh,
+      onEvent: (event) => {
+        void announceEvent(event)
+        scheduleRefresh()
+      },
+    })
+    return () => {
+      dispose()
+      if (eventTimer) {
+        clearTimeout(eventTimer)
+        eventTimer = null
+      }
+    }
+  })
 
   async function reloadEpics() {
     try {
@@ -251,9 +386,9 @@
           <Trash2 size={15} strokeWidth={1.6} aria-hidden="true" />
           Delete
         </Button>
-        <Button onclick={tab === 'issues' ? openNewIssue : openNewEpic}>
+        <Button onclick={tab === 'epics' ? openNewEpic : openNewIssue}>
           <Plus size={16} strokeWidth={1.6} aria-hidden="true" />
-          {tab === 'issues' ? 'New issue' : 'New epic'}
+          {tab === 'epics' ? 'New epic' : 'New issue'}
         </Button>
       </div>
     </header>
@@ -272,7 +407,7 @@
         class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'issues'
           ? 'bg-[var(--surface-2)] text-foreground'
           : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onclick={() => (tab = 'issues')}
+        onclick={() => selectTab('issues')}
       >
         <span class="size-1.5 rounded-full {tab === 'issues' ? 'bg-primary' : 'bg-transparent'}" aria-hidden="true"></span>
         Issues
@@ -281,11 +416,26 @@
       <button
         type="button"
         role="tab"
+        aria-selected={tab === 'board'}
+        class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'board'
+          ? 'bg-[var(--surface-2)] text-foreground'
+          : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onclick={() => selectTab('board')}
+      >
+        <span class="size-1.5 rounded-full {tab === 'board' ? 'bg-primary' : 'bg-transparent'}" aria-hidden="true"></span>
+        Board
+        {#if boardIssues.length > 0}
+          <span class="rounded-full bg-white/[.06] px-1.5 py-0.5 text-[10px] tnum text-[var(--text-3)]">{boardIssues.length}</span>
+        {/if}
+      </button>
+      <button
+        type="button"
+        role="tab"
         aria-selected={tab === 'epics'}
         class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'epics'
           ? 'bg-[var(--surface-2)] text-foreground'
           : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onclick={() => (tab = 'epics')}
+        onclick={() => selectTab('epics')}
       >
         <span class="size-1.5 rounded-full {tab === 'epics' ? 'bg-primary' : 'bg-transparent'}" aria-hidden="true"></span>
         Epics
@@ -309,6 +459,32 @@
               onreload={() => void loadIssues()}
               onclear={clearFilters}
             />
+          </div>
+        {:else if tab === 'board'}
+          <div role="tabpanel" aria-label="Board">
+            {#if boardError}
+              <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+                {boardError}
+              </div>
+            {/if}
+            {#if boardLoading && boardIssues.length === 0}
+              <div class="grid gap-3 lg:grid-cols-4" aria-hidden="true">
+                {#each Array(4) as _}
+                  <div class="h-72 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
+                {/each}
+              </div>
+            {:else}
+              <IssueBoard
+                projectRef={apiRef}
+                issues={boardIssues}
+                {epics}
+                movingIds={movingIssueIds}
+                truncated={boardTruncated}
+                onmove={moveBoardIssue}
+                onhidden={showHidden}
+                onopen={openBoardIssue}
+              />
+            {/if}
           </div>
         {:else}
           <div role="tabpanel" aria-label="Epics">

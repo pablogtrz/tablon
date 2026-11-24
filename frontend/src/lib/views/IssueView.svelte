@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import Layers from '@lucide/svelte/icons/layers'
   import Pencil from '@lucide/svelte/icons/pencil'
   import Trash2 from '@lucide/svelte/icons/trash-2'
   import UserMinus from '@lucide/svelte/icons/user-minus'
   import AgentChip from '$lib/components/tablon/AgentChip.svelte'
   import Button from '$lib/components/tablon/Button.svelte'
+  import CommentsSection from '$lib/components/tablon/CommentsSection.svelte'
   import ConfirmModal from '$lib/components/tablon/ConfirmModal.svelte'
   import IdChip from '$lib/components/tablon/IdChip.svelte'
   import MarkdownEditor from '$lib/components/tablon/MarkdownEditor.svelte'
@@ -15,6 +16,8 @@
   import { deleteIssue, getIssue, getProject, listEpics, releaseIssue, updateIssue } from '$lib/api'
   import type { UpdateIssueInput } from '$lib/api'
   import { messageOf } from '$lib/errors'
+  import { subscribeProjectEvents } from '$lib/events'
+  import type { ProjectEvent } from '$lib/events'
   import { formatDate, relativeTime } from '$lib/format'
   import { toggleTask } from '$lib/markdown'
   import { ISSUE_STATUS_OPTIONS, PRIORITY_OPTIONS } from '$lib/meta'
@@ -61,6 +64,11 @@
   let releaseError = $state('')
 
   let cancelDialogOpen = $state(false)
+  let commentsRefresh = $state(0)
+  let liveMessage = $state('')
+  let eventTimer: ReturnType<typeof setTimeout> | null = null
+  let pendingIssue = false
+  let pendingComments = false
   let guardOpen = $state(false)
   let guardResolve: ((value: boolean) => void) | null = null
   let guardPromise: Promise<boolean> | null = null
@@ -270,6 +278,86 @@
     }
   }
 
+  async function announce(message: string) {
+    if (typeof document !== 'undefined' && document.hidden) return
+    liveMessage = ''
+    await tick()
+    liveMessage = message
+  }
+
+  function queueRefresh(issueChanged: boolean, commentsChanged: boolean) {
+    pendingIssue ||= issueChanged
+    pendingComments ||= commentsChanged
+    if (eventTimer) clearTimeout(eventTimer)
+    eventTimer = setTimeout(() => {
+      eventTimer = null
+      if (pendingIssue) void refreshFromServer()
+      if (pendingComments) commentsRefresh += 1
+      pendingIssue = false
+      pendingComments = false
+    }, 150)
+  }
+
+  async function refreshFromServer() {
+    if (!issue) return
+    const keepTitle = titleDirty
+    const keepDescription = descriptionDirty
+    try {
+      const updated = await getIssue(issue.identifier)
+      issue = {
+        ...updated,
+        title: keepTitle ? issue.title : updated.title,
+        description: keepDescription ? issue.description : updated.description,
+      }
+      if (!keepTitle) titleDraft = updated.title
+      if (!keepDescription && descriptionMode === 'read') descriptionDraft = updated.description
+    } catch {
+      // The stream sync will retry; keep the current view usable.
+    }
+  }
+
+  function eventMatches(event: ProjectEvent): boolean {
+    if (!issue) return false
+    return event.issue_id === issue.id || event.identifier === issue.identifier
+  }
+
+  $effect(() => {
+    if (!project) return
+    const dispose = subscribeProjectEvents(projectRef, {
+      onsync: () => queueRefresh(true, true),
+      onEvent: (event) => {
+        if (!eventMatches(event)) return
+        if (event.type === 'issue.deleted') {
+          void announce(`Issue ${event.identifier ?? issue?.identifier ?? ''} deleted`)
+          void navigate(projectPath(projectRef))
+          return
+        }
+        if (event.type.startsWith('comment.')) {
+          const label = event.identifier ?? issue?.identifier ?? 'issue'
+          const messages: Record<string, string> = {
+            'comment.created': `New comment on ${label}`,
+            'comment.updated': `Comment updated on ${label}`,
+            'comment.deleted': `Comment deleted on ${label}`,
+          }
+          void announce(messages[event.type] ?? 'Comments updated')
+          queueRefresh(false, true)
+          return
+        }
+        if (event.type.startsWith('issue.')) {
+          void announce(`Issue ${event.identifier ?? issue?.identifier ?? ''} updated`)
+          queueRefresh(true, false)
+        }
+      },
+    })
+    return () => {
+      dispose()
+      if (eventTimer) {
+        clearTimeout(eventTimer)
+        eventTimer = null
+      }
+    }
+  })
+
   function askLeave(): Promise<boolean> {
     if (guardPromise) return guardPromise
     guardOpen = true
@@ -420,6 +508,7 @@
             <div class="mt-2">
               <MarkdownEditor
                 bind:value={descriptionDraft}
+                ariaLabel="Issue description"
                 dirty={descriptionDirty}
                 saving={descriptionSaving}
                 error={descriptionError}
@@ -529,6 +618,9 @@
         </Button>
       </aside>
     </div>
+
+    <CommentsSection issueRef={issue.identifier} refreshKey={commentsRefresh} />
+    <p class="sr-only" role="status" aria-live="polite">{liveMessage}</p>
   </div>
 
   <ConfirmModal
