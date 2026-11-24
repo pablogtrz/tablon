@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
+  import Layers from '@lucide/svelte/icons/layers'
   import Search from '@lucide/svelte/icons/search'
   import AgentChip from './AgentChip.svelte'
   import Button from './Button.svelte'
-  import IdChip from './IdChip.svelte'
-  import PriorityBadge from './PriorityBadge.svelte'
+  import IssueTable from './IssueTable.svelte'
   import Select from './Select.svelte'
-  import StatusCell from './StatusCell.svelte'
-  import { issuePath, navigate } from '$lib/router.svelte'
-  import { ANY_PRIORITY_OPTION, ANY_STATUS_OPTION, ISSUE_STATUS_OPTIONS, PRIORITY_OPTIONS } from '$lib/meta'
+  import { ANY_PRIORITY_OPTION, ANY_STATUS_OPTION, ISSUE_STATUS_META, ISSUE_STATUS_OPTIONS, PRIORITY_OPTIONS } from '$lib/meta'
+  import { groupIssues, isListGroupBy, LIST_GROUP_BY_LABELS, LIST_GROUP_BY_OPTIONS } from '$lib/issue-grouping'
+  import type { ListGroupBy } from '$lib/issue-grouping'
+  import { readPreference, writePreference } from '$lib/preferences'
   import { inputClass } from '$lib/ui'
   import { cn } from '$lib/utils'
   import type { Epic, Issue } from '$lib/types'
@@ -36,13 +38,28 @@
     onclear: () => void
   } = $props()
 
-  const epicMap = $derived(new Map(epics.map((epic) => [epic.id, epic.title])))
-  const hasFilters = $derived(Boolean(status || priority || search.trim()))
+  let groupBy = $state<ListGroupBy>('none')
 
-  function epicTitle(id: string | null): string {
-    if (!id) return '—'
-    return epicMap.get(id) ?? 'Unknown epic'
+  const hasFilters = $derived(Boolean(status || priority || search.trim()))
+  const groups = $derived(groupIssues(issues, groupBy, epics))
+  const grouped = $derived(groupBy !== 'none')
+  const showEpicColumn = $derived(groupBy !== 'epic')
+  const showAgentColumn = $derived(groupBy !== 'agent')
+  const groupOptions = LIST_GROUP_BY_OPTIONS.map((value) => ({
+    value,
+    label: LIST_GROUP_BY_LABELS[value],
+  }))
+
+  function changeGroup(value: string) {
+    if (!isListGroupBy(value)) return
+    groupBy = value
+    writePreference('list.groupBy', value)
   }
+
+  onMount(() => {
+    const saved = readPreference('list.groupBy')
+    if (isListGroupBy(saved)) groupBy = saved
+  })
 </script>
 
 <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -70,6 +87,16 @@
           priority = value
           onreload()
         }}
+      />
+    </label>
+
+    <label class="flex flex-col gap-1 text-[11px] text-[var(--text-3)]">
+      Group by
+      <Select
+        value={groupBy}
+        options={groupOptions}
+        class="min-w-32"
+        onchange={changeGroup}
       />
     </label>
 
@@ -112,7 +139,7 @@
 {#if loading}
   <div class="mt-4 space-y-2" aria-hidden="true">
     {#each Array(4) as _}
-      <div class="h-12 animate-pulse rounded-xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
+      <div class="h-11 animate-pulse rounded-lg bg-[var(--surface-1)] motion-reduce:animate-none"></div>
     {/each}
   </div>
 {:else if issues.length === 0}
@@ -126,88 +153,54 @@
     {/if}
   </div>
 {:else}
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div class="glass mt-4 hidden overflow-hidden rounded-2xl sm:block" role="region" tabindex="0" aria-label="Issue list">
-    <table class="w-full text-left text-sm">
-      <caption class="sr-only">Issues in this project</caption>
-      <thead class="border-b border-border text-[11px] font-medium text-[var(--text-3)]">
-        <tr>
-          <th scope="col" class="px-3 py-2.5">ID</th>
-          <th scope="col" class="w-36 px-3 py-2.5">Status</th>
-          <th scope="col" class="w-28 px-3 py-2.5">Priority</th>
-          <th scope="col" class="px-3 py-2.5">Issue</th>
-          <th scope="col" class="hidden px-3 py-2.5 lg:table-cell">Epic</th>
-          <th scope="col" class="hidden px-3 py-2.5 xl:table-cell">Agent</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each issues as issue (issue.id)}
-          {@const href = issuePath(projectRef, issue.identifier)}
-          <tr class="border-t border-border/60 transition-colors hover:bg-white/[.03]">
-            <th scope="row" class="whitespace-nowrap px-3 py-2.5 text-left font-normal">
-              <a
-                {href}
-                class="cursor-pointer rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onclick={(event) => {
-                  event.preventDefault()
-                  navigate(href)
-                }}
-              >
-                <IdChip identifier={issue.identifier} />
-              </a>
-            </th>
-            <td class="px-3 py-2.5"><StatusCell status={issue.status} /></td>
-            <td class="whitespace-nowrap px-3 py-2.5"><PriorityBadge priority={issue.priority} /></td>
-            <td class="max-w-[34rem] px-3 py-2.5">
-              <a
-                {href}
-                class="block cursor-pointer truncate rounded text-sm font-medium text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-                onclick={(event) => {
-                  event.preventDefault()
-                  navigate(href)
-                }}
-              >
-                {issue.title}
-              </a>
-            </td>
-            <td class="hidden max-w-48 truncate px-3 py-2.5 text-xs text-[var(--text-2)] lg:table-cell">{epicTitle(issue.epic_id)}</td>
-            <td class="hidden whitespace-nowrap px-3 py-2.5 xl:table-cell">
-              {#if issue.agent_id}
-                <AgentChip agentId={issue.agent_id} />
-              {:else}
-                <span class="text-xs text-[var(--text-3)]">—</span>
+  <div class="mt-4">
+    {#if !grouped}
+      <IssueTable
+        {projectRef}
+        {issues}
+        {epics}
+        caption="Issues in this project"
+        showHeaders
+        {showEpicColumn}
+        {showAgentColumn}
+      />
+    {:else}
+      <div class="space-y-6">
+        {#each groups as group, index (group.key)}
+          {@const statusMeta = group.kind === 'status' ? ISSUE_STATUS_META[group.key as keyof typeof ISSUE_STATUS_META] : null}
+          <section aria-labelledby={`issue-group-${index}`}>
+            <div class="flex items-center gap-2 border-b border-border py-2">
+              {#if statusMeta}
+                {@const Icon = statusMeta.icon}
+                <Icon size={15} strokeWidth={1.7} style="color: {statusMeta.tone}" aria-hidden="true" />
+              {:else if group.kind === 'epic'}
+                <Layers size={15} strokeWidth={1.7} class="text-[var(--text-3)]" aria-hidden="true" />
+              {:else if group.kind === 'agent'}
+                <span class="size-1.5 rounded-full bg-agent" aria-hidden="true"></span>
               {/if}
-            </td>
-          </tr>
+              <h3 id={`issue-group-${index}`} class="text-xs font-semibold text-foreground">
+                {#if group.kind === 'agent'}
+                  <AgentChip agentId={group.key} class="h-6 text-[11px]" />
+                {:else}
+                  {group.label}
+                {/if}
+              </h3>
+              <span class="tnum rounded-full bg-white/[.06] px-1.5 py-0.5 text-[10px] text-[var(--text-3)]">
+                {group.issues.length}
+              </span>
+            </div>
+            <IssueTable
+              {projectRef}
+              issues={group.issues}
+              {epics}
+              caption={`${group.label} issues`}
+              showHeaders={false}
+              {showEpicColumn}
+              {showAgentColumn}
+            />
+          </section>
         {/each}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="mt-4 space-y-2 sm:hidden">
-    {#each issues as issue (issue.id)}
-      {@const href = issuePath(projectRef, issue.identifier)}
-      <a
-        {href}
-        class="block cursor-pointer rounded-xl border border-border bg-[var(--surface-1)] p-3 outline-none transition-colors hover:bg-[var(--surface-2)] focus-visible:ring-2 focus-visible:ring-ring"
-        onclick={(event) => {
-          event.preventDefault()
-          navigate(href)
-        }}
-      >
-        <div class="flex flex-wrap items-center gap-1.5">
-          <IdChip identifier={issue.identifier} />
-          <StatusCell status={issue.status} class="w-auto" />
-          <PriorityBadge priority={issue.priority} />
-        </div>
-        <h3 class="mt-2 text-sm font-medium leading-snug">{issue.title}</h3>
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-3)]">
-          <span class="truncate">{epicTitle(issue.epic_id)}</span>
-          {#if issue.agent_id}
-            <AgentChip agentId={issue.agent_id} />
-          {/if}
-        </div>
-      </a>
-    {/each}
+      </div>
+    {/if}
   </div>
 {/if}

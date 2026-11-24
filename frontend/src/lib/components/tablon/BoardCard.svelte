@@ -3,7 +3,7 @@
   import GripVertical from '@lucide/svelte/icons/grip-vertical'
   import LoaderCircle from '@lucide/svelte/icons/loader-circle'
   import AgentChip from './AgentChip.svelte'
-  import IdChip from './IdChip.svelte'
+  import IssueId from './IssueId.svelte'
   import PriorityBadge from './PriorityBadge.svelte'
   import { ISSUE_STATUS_OPTIONS } from '$lib/meta'
   import { cn } from '$lib/utils'
@@ -86,7 +86,7 @@
   onkeydown={handleKeydown}
 >
   <div class="flex items-start justify-between gap-2">
-    <IdChip identifier={issue.identifier} />
+    <IssueId identifier={issue.identifier} />
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <details
       bind:open={menuOpen}

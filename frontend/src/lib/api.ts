@@ -198,6 +198,10 @@ export function createEpic(projectRef: string, input: CreateEpicInput): Promise<
   return request<Epic>(`/api/v1/projects/${encodeURIComponent(projectRef)}/epics`, json(input))
 }
 
+export function getEpic(ref: string): Promise<Epic> {
+  return request<Epic>(`/api/v1/epics/${encodeURIComponent(ref)}`)
+}
+
 export function updateEpic(ref: string, input: UpdateEpicInput): Promise<Epic> {
   return request<Epic>(`/api/v1/epics/${encodeURIComponent(ref)}`, patch(input))
 }

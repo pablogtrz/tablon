@@ -5,12 +5,16 @@ export const BOARD_STATUSES = ['todo', 'in-progress', 'in-review', 'done'] as co
 
 export type BoardStatus = (typeof BOARD_STATUSES)[number]
 
+export const BOARD_STATUSES_WITH_BACKLOG = ['backlog', ...BOARD_STATUSES] as const
+
+export type VisibleBoardStatus = (typeof BOARD_STATUSES_WITH_BACKLOG)[number]
+
 export const HIDDEN_BOARD_STATUSES = ['backlog', 'canceled'] as const
 
 export type HiddenBoardStatus = (typeof HIDDEN_BOARD_STATUSES)[number]
 
 export interface BoardColumn {
-  status: BoardStatus
+  status: VisibleBoardStatus
   label: string
 }
 
@@ -19,8 +23,26 @@ export const BOARD_COLUMNS: BoardColumn[] = BOARD_STATUSES.map((status) => ({
   label: ISSUE_STATUS_LABELS[status],
 }))
 
+export function visibleBoardStatuses(includeBacklog: boolean): VisibleBoardStatus[] {
+  return includeBacklog ? [...BOARD_STATUSES_WITH_BACKLOG] : [...BOARD_STATUSES]
+}
+
+export function visibleBoardColumns(includeBacklog: boolean): BoardColumn[] {
+  return visibleBoardStatuses(includeBacklog).map((status) => ({
+    status,
+    label: ISSUE_STATUS_LABELS[status],
+  }))
+}
+
 export function isBoardStatus(status: IssueStatus): status is BoardStatus {
   return (BOARD_STATUSES as readonly IssueStatus[]).includes(status)
+}
+
+export function isVisibleBoardStatus(
+  status: IssueStatus,
+  includeBacklog: boolean,
+): status is VisibleBoardStatus {
+  return includeBacklog ? status !== 'canceled' : isBoardStatus(status)
 }
 
 function compareIssues(a: Issue, b: Issue): number {
@@ -34,27 +56,35 @@ export function sortIssues(issues: Issue[]): Issue[] {
   return [...issues].sort(compareIssues)
 }
 
-export function groupBoardIssues(issues: Issue[]): Record<BoardStatus, Issue[]> {
-  const grouped: Record<BoardStatus, Issue[]> = {
+export function groupBoardIssues(
+  issues: Issue[],
+  includeBacklog = false,
+): Record<VisibleBoardStatus, Issue[]> {
+  const grouped: Record<VisibleBoardStatus, Issue[]> = {
+    backlog: [],
     todo: [],
     'in-progress': [],
     'in-review': [],
     done: [],
   }
+  const statuses = visibleBoardStatuses(includeBacklog)
   for (const issue of issues) {
-    if (isBoardStatus(issue.status)) {
-      grouped[issue.status].push(issue)
+    if (statuses.includes(issue.status as VisibleBoardStatus)) {
+      grouped[issue.status as VisibleBoardStatus].push(issue)
     }
   }
-  for (const status of BOARD_STATUSES) {
+  for (const status of statuses) {
     grouped[status] = sortIssues(grouped[status])
   }
   return grouped
 }
 
-export function hiddenBoardCounts(issues: Issue[]): Record<HiddenBoardStatus, number> {
+export function hiddenBoardCounts(
+  issues: Issue[],
+  includeBacklog = false,
+): Record<HiddenBoardStatus, number> {
   return {
-    backlog: issues.filter((issue) => issue.status === 'backlog').length,
+    backlog: includeBacklog ? 0 : issues.filter((issue) => issue.status === 'backlog').length,
     canceled: issues.filter((issue) => issue.status === 'canceled').length,
   }
 }
@@ -72,11 +102,13 @@ export function applyBoardMove(issues: Issue[], issueID: string, status: IssueSt
 export function adjacentBoardStatus(
   status: IssueStatus,
   direction: -1 | 1,
-): BoardStatus | null {
-  if (!isBoardStatus(status)) return null
-  const index = BOARD_STATUSES.indexOf(status) + direction
-  if (index < 0 || index >= BOARD_STATUSES.length) return null
-  return BOARD_STATUSES[index]
+  statuses: VisibleBoardStatus[] = [...BOARD_STATUSES],
+): VisibleBoardStatus | null {
+  const index = statuses.indexOf(status as VisibleBoardStatus)
+  if (index < 0) return null
+  const next = index + direction
+  if (next < 0 || next >= statuses.length) return null
+  return statuses[next]
 }
 
 export function boardStatusLabel(status: IssueStatus): string {

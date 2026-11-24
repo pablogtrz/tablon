@@ -2,6 +2,7 @@
   import Brand from '$lib/components/tablon/Brand.svelte'
   import MobileNav from '$lib/components/tablon/MobileNav.svelte'
   import Dashboard from '$lib/views/Dashboard.svelte'
+  import EpicView from '$lib/views/EpicView.svelte'
   import NotFound from '$lib/views/NotFound.svelte'
   import ProjectView from '$lib/views/ProjectView.svelte'
   import SettingsView from '$lib/views/SettingsView.svelte'
@@ -138,6 +139,8 @@
             <Dashboard />
           {:else if page.name === 'project'}
             <ProjectView projectRef={page.projectRef} />
+          {:else if page.name === 'epic'}
+            <EpicView projectRef={page.projectRef} epicRef={page.epicRef} />
           {:else if page.name === 'issue'}
             {#await loadIssueView()}
               <div class="h-72 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none" aria-hidden="true"></div>

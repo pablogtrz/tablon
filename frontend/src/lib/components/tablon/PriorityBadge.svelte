@@ -14,11 +14,11 @@
 
 <span
   class={cn(
-    'inline-flex h-[22px] items-center gap-1.5 rounded-full bg-white/[.035] px-2 text-[10.5px] font-medium whitespace-nowrap text-muted-foreground',
+    'inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[var(--soft)] px-2.5 text-[11.5px] font-semibold whitespace-nowrap text-[var(--tone)]',
     className,
   )}
-  style="--tone: {meta.tone}"
+  style="--tone: {meta.tone}; --soft: {meta.soft}"
 >
-  <Icon size={12} strokeWidth={1.6} class="shrink-0 text-[var(--tone)]" aria-hidden="true" />
+  <Icon size={14} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
   {meta.label}
 </span>

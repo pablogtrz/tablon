@@ -5,6 +5,8 @@ import {
   groupBoardIssues,
   hiddenBoardCounts,
   isBoardStatus,
+  visibleBoardColumns,
+  visibleBoardStatuses,
 } from './board'
 import type { Issue, IssueStatus } from './types'
 
@@ -66,5 +68,22 @@ describe('board grouping', () => {
     expect(adjacentBoardStatus('backlog', 1)).toBeNull()
     expect(isBoardStatus('done')).toBe(true)
     expect(isBoardStatus('backlog')).toBe(false)
+  })
+
+  it('adds backlog as an optional visible column', () => {
+    expect(visibleBoardStatuses(false)).toEqual(['todo', 'in-progress', 'in-review', 'done'])
+    expect(visibleBoardStatuses(true)).toEqual(['backlog', 'todo', 'in-progress', 'in-review', 'done'])
+    expect(visibleBoardColumns(true).map((column) => column.label)).toEqual([
+      'Backlog',
+      'Todo',
+      'In Progress',
+      'In Review',
+      'Done',
+    ])
+
+    const grouped = groupBoardIssues(issues, true)
+    expect(grouped.backlog.map((item) => item.id)).toEqual(['5'])
+    expect(hiddenBoardCounts(issues, true)).toEqual({ backlog: 0, canceled: 1 })
+    expect(adjacentBoardStatus('todo', -1, visibleBoardStatuses(true))).toBe('backlog')
   })
 })
