@@ -1,16 +1,20 @@
 package api_test
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pablogtrz/tablon/internal/api"
 	"github.com/pablogtrz/tablon/internal/config"
+	"github.com/pablogtrz/tablon/internal/events"
 	"github.com/pablogtrz/tablon/internal/service"
 	"github.com/pablogtrz/tablon/internal/store"
 )
@@ -35,7 +39,9 @@ func newTestAPI(t *testing.T, token string) *testAPI {
 		LogLevel: slog.LevelError,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(api.New(cfg, service.New(st), logger))
+	hub := events.NewHub(logger)
+	t.Cleanup(hub.Close)
+	srv := httptest.NewServer(api.New(cfg, service.New(st, hub), hub, logger))
 	t.Cleanup(srv.Close)
 	return &testAPI{srv: srv}
 }
@@ -204,6 +210,14 @@ func TestAuthIsOptionalAndEnforcedWhenConfigured(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("health status = %d, want 200", status)
 	}
+	status, _ = a.do(t, http.MethodGet, "/api/v1/issues/PROJ-1/comments", nil, nil)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("comments unauth status = %d, want 401", status)
+	}
+	status, _ = a.do(t, http.MethodGet, "/api/v1/projects/PROJ/events", nil, nil)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("events unauth status = %d, want 401", status)
+	}
 }
 
 func TestValidationAndDecodeErrors(t *testing.T) {
@@ -310,5 +324,215 @@ func TestProjectCountsArchiveAndIssuePagination(t *testing.T) {
 	}
 	if len(projects.Items) != 0 {
 		t.Fatalf("archived project leaked into default list")
+	}
+}
+
+func TestCommentsCRUDAndIdempotency(t *testing.T) {
+	a := newTestAPI(t, "")
+
+	status, body := a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name": "Comments", "identifier": "CMS",
+	}, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("create project status = %d, body = %s", status, body)
+	}
+	project := decode[map[string]any](t, body)
+	projectID := project["id"].(string)
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/projects/"+projectID+"/issues", map[string]any{
+		"title": "Commented issue",
+	}, map[string]string{"Idempotency-Key": "issue-key"})
+	if status != http.StatusCreated {
+		t.Fatalf("create issue status = %d, body = %s", status, body)
+	}
+	issue := decode[map[string]any](t, body)
+	issueID := issue["id"].(string)
+	identifier := issue["identifier"].(string)
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/projects/"+projectID+"/issues", map[string]any{
+		"title": "Commented issue",
+	}, map[string]string{"Idempotency-Key": "issue-key"})
+	if status != http.StatusCreated {
+		t.Fatalf("replayed issue status = %d, body = %s", status, body)
+	}
+	replayed := decode[map[string]any](t, body)
+	if replayed["id"] != issueID {
+		t.Fatalf("replayed issue id = %v, want %v", replayed["id"], issueID)
+	}
+
+	status, body = a.do(t, http.MethodGet, "/api/v1/projects/"+projectID+"/issues", nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list issues status = %d", status)
+	}
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		t.Fatalf("decode issues: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("issues = %d, want 1 after idempotent replay", len(page.Items))
+	}
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/issues/"+identifier+"/comments", map[string]any{
+		"content":  "first **comment**",
+		"agent_id": "agent-a",
+	}, map[string]string{"Idempotency-Key": "comment-key"})
+	if status != http.StatusCreated {
+		t.Fatalf("create comment status = %d, body = %s", status, body)
+	}
+	comment := decode[map[string]any](t, body)
+	commentID := comment["id"].(string)
+	if comment["agent_id"] != "agent-a" {
+		t.Fatalf("agent_id = %v", comment["agent_id"])
+	}
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/issues/"+identifier+"/comments", map[string]any{
+		"content":  "first **comment**",
+		"agent_id": "agent-a",
+	}, map[string]string{"Idempotency-Key": "comment-key"})
+	if status != http.StatusCreated {
+		t.Fatalf("replayed comment status = %d, body = %s", status, body)
+	}
+	dupe := decode[map[string]any](t, body)
+	if dupe["id"] != commentID {
+		t.Fatalf("replayed comment id = %v, want %v", dupe["id"], commentID)
+	}
+
+	status, body = a.do(t, http.MethodGet, "/api/v1/issues/"+identifier+"/comments", nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list comments status = %d, body = %s", status, body)
+	}
+	var comments struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(body, &comments); err != nil {
+		t.Fatalf("decode comments: %v", err)
+	}
+	if len(comments.Items) != 1 {
+		t.Fatalf("comments = %d, want 1", len(comments.Items))
+	}
+
+	status, body = a.do(t, http.MethodPatch, "/api/v1/comments/"+commentID, map[string]any{
+		"content": "edited",
+	}, nil)
+	if status != http.StatusOK {
+		t.Fatalf("update comment status = %d, body = %s", status, body)
+	}
+	edited := decode[map[string]any](t, body)
+	if edited["content"] != "edited" {
+		t.Fatalf("content = %v", edited["content"])
+	}
+
+	status, body = a.do(t, http.MethodDelete, "/api/v1/comments/"+commentID, nil, nil)
+	if status != http.StatusNoContent {
+		t.Fatalf("delete comment status = %d, body = %s", status, body)
+	}
+	status, _ = a.do(t, http.MethodPatch, "/api/v1/comments/"+commentID, map[string]any{"content": "x"}, nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("update deleted comment status = %d", status)
+	}
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/issues/"+identifier+"/comments", map[string]any{
+		"content": "different",
+	}, map[string]string{"Idempotency-Key": "comment-key"})
+	if status != http.StatusConflict {
+		t.Fatalf("different payload status = %d, body = %s", status, body)
+	}
+}
+
+func TestProjectEventsStreamsIssueCreated(t *testing.T) {
+	a := newTestAPI(t, "")
+
+	status, body := a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name": "Events", "identifier": "EVT",
+	}, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("create project status = %d, body = %s", status, body)
+	}
+	project := decode[map[string]any](t, body)
+	projectID := project["id"].(string)
+
+	req, err := http.NewRequest(http.MethodGet, a.srv.URL+"/api/v1/projects/"+projectID+"/events", nil)
+	if err != nil {
+		t.Fatalf("new stream request: %v", err)
+	}
+	resp, err := a.srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("stream status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content type = %q", ct)
+	}
+	if resp.Header.Get("X-Accel-Buffering") != "no" {
+		t.Fatalf("x-accel-buffering = %q", resp.Header.Get("X-Accel-Buffering"))
+	}
+
+	lines := make(chan string)
+	go func() {
+		defer close(lines)
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			lines <- line
+		}
+	}()
+	readLine := func() string {
+		t.Helper()
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				t.Fatal("stream closed")
+			}
+			return line
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for stream line")
+			return ""
+		}
+	}
+
+	if line := readLine(); !strings.HasPrefix(line, "retry:") {
+		t.Fatalf("first line = %q", line)
+	}
+	if line := readLine(); strings.TrimSpace(line) != "" {
+		t.Fatalf("expected blank after retry, got %q", line)
+	}
+
+	status, body = a.do(t, http.MethodPost, "/api/v1/projects/"+projectID+"/issues", map[string]any{
+		"title": "Streamed issue",
+	}, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("create issue status = %d, body = %s", status, body)
+	}
+
+	var eventName, data string
+	for {
+		line := readLine()
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+		if strings.HasPrefix(line, "event: ") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+		}
+		if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+		}
+	}
+	if eventName != "issue.created" {
+		t.Fatalf("event = %q", eventName)
+	}
+	var event map[string]any
+	if err := json.Unmarshal([]byte(data), &event); err != nil {
+		t.Fatalf("decode event: %v (%s)", err, data)
+	}
+	if event["type"] != "issue.created" || event["project_id"] != projectID {
+		t.Fatalf("event payload = %+v", event)
 	}
 }

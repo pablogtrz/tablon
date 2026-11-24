@@ -74,3 +74,21 @@ describe('toggleTask', () => {
     expect(toggleTask(source, 4)).toBe(source)
   })
 })
+
+describe('code blocks', () => {
+  it('wraps fenced code with a language header and copy button', () => {
+    const output = html('```ts\nconst x = 1\n```')
+    expect(output).toContain('class="markdown-codeblock"')
+    expect(output).toContain('data-language="ts"')
+    expect(output).toContain('class="markdown-codeblock-lang">ts</span>')
+    expect(output).toContain('class="markdown-codeblock-copy"')
+    expect(output).toContain('aria-label="Copy ts block"')
+    expect(output).toContain('<pre><code class="language-ts">')
+  })
+
+  it('labels unlabelled fences as Code', () => {
+    const output = html('```\nplain\n```')
+    expect(output).toContain('class="markdown-codeblock-lang">Code</span>')
+    expect(output).toContain('aria-label="Copy code block"')
+  })
+})

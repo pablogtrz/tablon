@@ -27,6 +27,7 @@ Thumbs.db
 
 # Go
 /bin/
+/tablon
 /dist/
 *.test
 *.out
@@ -36,6 +37,9 @@ coverage.out
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 *.log
 pnpm-debug.log*
 

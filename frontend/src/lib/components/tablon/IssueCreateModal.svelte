@@ -5,6 +5,7 @@
   import Layers from '@lucide/svelte/icons/layers'
   import { createIssue } from '$lib/api'
   import { messageOf } from '$lib/errors'
+  import { newIdempotencyKey } from '$lib/idempotency'
   import { inputClass, labelClass, textareaClass } from '$lib/ui'
   import { ISSUE_STATUS_OPTIONS, PRIORITY_OPTIONS } from '$lib/meta'
   import type { Epic, Issue, IssuePriority, IssueStatus } from '$lib/types'
@@ -28,6 +29,7 @@
   let epicID = $state('')
   let saving = $state(false)
   let error = $state('')
+  let idempotencyKey = $state('')
 
   const epicOptions = $derived([
     { value: '', label: 'No epic', icon: Layers },
@@ -47,20 +49,36 @@
     priority = 'none'
     epicID = ''
     error = ''
+    idempotencyKey = ''
+  })
+
+  $effect(() => {
+    // A retry with the same draft must reuse the key; an edited draft gets a new one.
+    void title
+    void description
+    void status
+    void priority
+    void epicID
+    idempotencyKey = ''
   })
 
   async function submit() {
     if (saving) return
     saving = true
     error = ''
+    idempotencyKey ||= newIdempotencyKey()
     try {
-      const issue = await createIssue(projectRef, {
-        title,
-        description,
-        status,
-        priority,
-        epic_id: epicID || null,
-      })
+      const issue = await createIssue(
+        projectRef,
+        {
+          title,
+          description,
+          status,
+          priority,
+          epic_id: epicID || null,
+        },
+        idempotencyKey,
+      )
       oncreated(issue)
       open = false
     } catch (err) {

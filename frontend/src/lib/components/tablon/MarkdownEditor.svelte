@@ -1,9 +1,29 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
+  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+  import { Compartment, EditorState } from '@codemirror/state'
+  import {
+    drawSelection,
+    EditorView,
+    highlightSpecialChars,
+    keymap,
+    placeholder as editorPlaceholder,
+  } from '@codemirror/view'
   import Button from './Button.svelte'
+  import CodeBlockDialog from './CodeBlockDialog.svelte'
   import MarkdownRenderer from './MarkdownRenderer.svelte'
   import MarkdownToolbar from './MarkdownToolbar.svelte'
   import Modal from './Modal.svelte'
+  import { markdownEditorTheme, markdownLineDecorations } from '$lib/editor-theme'
+  import {
+    buildCodeFence,
+    insertText as insertTextAt,
+    prefixLines as prefixLinesText,
+    replaceText,
+    wrapSelection as wrapSelectionText,
+    type EditResult,
+    type Selection,
+  } from '$lib/markdown-editor'
   import { toggleTask, type MarkdownAction } from '$lib/markdown'
   import { inputClass, labelClass } from '$lib/ui'
 
@@ -12,6 +32,11 @@
     dirty = false,
     saving = false,
     error = '',
+    submitLabel = 'Save description',
+    placeholder = 'Write with Markdown, or use the toolbar above.',
+    compact = false,
+    ariaLabel = 'Markdown editor',
+    ariaDescribedBy = undefined,
     onsave,
     oncancel,
   }: {
@@ -19,78 +44,125 @@
     dirty?: boolean
     saving?: boolean
     error?: string
+    submitLabel?: string
+    placeholder?: string
+    compact?: boolean
+    ariaLabel?: string
+    ariaDescribedBy?: string
     onsave: (value: string) => void
     oncancel: () => void
   } = $props()
 
   let mode = $state<'write' | 'preview'>('write')
-  let editor = $state<HTMLTextAreaElement>()
+  let host = $state<HTMLDivElement>()
+  let view: EditorView | null = null
+  let syncing = false
+  const readOnly = new Compartment()
 
   let linkOpen = $state(false)
   let linkText = $state('')
   let linkUrl = $state('')
   let linkError = $state('')
-  let linkRange = $state<{ start: number; end: number } | null>(null)
+  let linkRange = $state<Selection | null>(null)
+  let linkWasOpen = $state(false)
 
   let imageOpen = $state(false)
   let imageAlt = $state('')
   let imageUrl = $state('')
   let imageError = $state('')
-  let imageRange = $state<{ start: number; end: number } | null>(null)
+  let imageRange = $state<Selection | null>(null)
+  let imageWasOpen = $state(false)
 
-  async function replaceRange(start: number, end: number, text: string, selectStart?: number, selectEnd?: number) {
-    value = value.slice(0, start) + text + value.slice(end)
-    await tick()
-    editor?.focus()
-    const from = selectStart ?? start + text.length
-    const to = selectEnd ?? from
-    editor?.setSelectionRange(from, to)
+  let codeBlockOpen = $state(false)
+  let codeBlockRange = $state<Selection | null>(null)
+  let codeBlockWasOpen = $state(false)
+
+  function currentValue(): string {
+    return view?.state.doc.toString() ?? value
   }
 
-  function wrapSelection(before: string, after: string, placeholder: string) {
-    if (!editor) return
-    const start = editor.selectionStart
-    const end = editor.selectionEnd
-    const selected = value.slice(start, end)
-    const content = selected || placeholder
-    void replaceRange(start, end, before + content + after, start + before.length, start + before.length + content.length)
+  function selection(): Selection {
+    if (!view) return { from: 0, to: 0 }
+    const range = view.state.selection.main
+    return { from: range.from, to: range.to }
   }
 
-  function prefixLines(prefix: string | ((index: number) => string)) {
-    if (!editor) return
-    const start = editor.selectionStart
-    const end = editor.selectionEnd
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1
-    const rawLineEnd = value.indexOf('\n', end)
-    const lineEnd = rawLineEnd === -1 ? value.length : rawLineEnd
-    const lines = value.slice(lineStart, lineEnd).split('\n')
-    const next = lines
-      .map((line, index) => (typeof prefix === 'function' ? prefix(index) : prefix) + line)
-      .join('\n')
-    void replaceRange(lineStart, lineEnd, next, lineStart, lineStart + next.length)
+  function applyEdit(result: EditResult) {
+    if (!view) {
+      value = result.value
+      return
+    }
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: result.value },
+      selection: { anchor: result.from, head: result.to },
+      scrollIntoView: true,
+    })
+    view.focus()
+  }
+
+  function replaceRange(
+    from: number,
+    to: number,
+    text: string,
+    selectFrom = from + text.length,
+    selectTo = selectFrom,
+  ) {
+    if (!view) {
+      value = replaceText(value, from, to, text, selectFrom, selectTo).value
+      return
+    }
+    const result = replaceText(currentValue(), from, to, text, selectFrom, selectTo)
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: result.from, head: result.to },
+      scrollIntoView: true,
+    })
+    view.focus()
+  }
+
+  function wrapSelectionBeforeAfter(before: string, after: string, placeholderText: string) {
+    const { from, to } = selection()
+    applyEdit(wrapSelectionText(currentValue(), from, to, before, after, placeholderText))
+  }
+
+  function prefixSelectionLines(prefix: string | ((index: number) => string)) {
+    const { from, to } = selection()
+    applyEdit(prefixLinesText(currentValue(), from, to, prefix))
   }
 
   function insertText(text: string) {
-    if (!editor) return
-    void replaceRange(editor.selectionStart, editor.selectionEnd, text)
+    const { from, to } = selection()
+    applyEdit(insertTextAt(currentValue(), from, to, text))
   }
 
   function openLink() {
-    if (!editor) return
-    linkRange = { start: editor.selectionStart, end: editor.selectionEnd }
-    linkText = value.slice(linkRange.start, linkRange.end)
+    const range = selection()
+    linkRange = range
+    linkText = currentValue().slice(range.from, range.to)
     linkUrl = ''
     linkError = ''
     linkOpen = true
   }
 
   function openImage() {
-    if (!editor) return
-    imageRange = { start: editor.selectionStart, end: editor.selectionEnd }
+    const range = selection()
+    imageRange = range
     imageAlt = ''
     imageUrl = ''
     imageError = ''
     imageOpen = true
+  }
+
+  function openCodeBlock() {
+    codeBlockRange = selection()
+    codeBlockOpen = true
+  }
+
+  function insertCodeBlock(language: string) {
+    const range = codeBlockRange ?? selection()
+    const built = buildCodeFence(currentValue(), range.from, range.to, language)
+    replaceRange(range.from, range.to, built.text, built.selectFrom, built.selectTo)
+    codeBlockRange = null
   }
 
   function normalizeUrl(raw: string, image: boolean): string {
@@ -103,7 +175,7 @@
     return `https://${url}`
   }
 
-  async function insertLink() {
+  function insertLink() {
     if (!linkRange) return
     const url = normalizeUrl(linkUrl, false)
     if (!url) {
@@ -111,12 +183,11 @@
       return
     }
     const label = linkText.trim() || 'link text'
-    const markdown = `[${label}](${url})`
-    await replaceRange(linkRange.start, linkRange.end, markdown)
+    replaceRange(linkRange.from, linkRange.to, `[${label}](${url})`)
     linkOpen = false
   }
 
-  async function insertImage() {
+  function insertImage() {
     if (!imageRange) return
     const url = normalizeUrl(imageUrl, true)
     if (!url) {
@@ -124,42 +195,41 @@
       return
     }
     const alt = imageAlt.trim() || 'image'
-    const markdown = `![${alt}](${url})`
-    await replaceRange(imageRange.start, imageRange.end, markdown)
+    replaceRange(imageRange.from, imageRange.to, `![${alt}](${url})`)
     imageOpen = false
   }
 
   function applyAction(action: MarkdownAction) {
     switch (action) {
       case 'bold':
-        wrapSelection('**', '**', 'bold text')
+        wrapSelectionBeforeAfter('**', '**', 'bold text')
         break
       case 'italic':
-        wrapSelection('*', '*', 'italic text')
+        wrapSelectionBeforeAfter('*', '*', 'italic text')
         break
       case 'strikethrough':
-        wrapSelection('~~', '~~', 'strikethrough')
+        wrapSelectionBeforeAfter('~~', '~~', 'strikethrough')
         break
       case 'heading':
-        prefixLines('## ')
+        prefixSelectionLines('## ')
         break
       case 'bullet':
-        prefixLines('- ')
+        prefixSelectionLines('- ')
         break
       case 'numbered':
-        prefixLines((index) => `${index + 1}. `)
+        prefixSelectionLines((index) => `${index + 1}. `)
         break
       case 'task':
-        prefixLines('- [ ] ')
+        prefixSelectionLines('- [ ] ')
         break
       case 'quote':
-        prefixLines('> ')
+        prefixSelectionLines('> ')
         break
       case 'code':
-        wrapSelection('`', '`', 'code')
+        wrapSelectionBeforeAfter('`', '`', 'code')
         break
       case 'codeblock':
-        wrapSelection('```\n', '\n```', 'code')
+        openCodeBlock()
         break
       case 'link':
         openLink()
@@ -173,43 +243,156 @@
     }
   }
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.isComposing) return
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      oncancel()
-      return
-    }
-    const mod = event.metaKey || event.ctrlKey
-    if (mod && event.key === 'Enter') {
-      event.preventDefault()
-      if (dirty && !saving) onsave(value)
-      return
-    }
-    if (!mod) return
-    const key = event.key.toLowerCase()
-    if (key === 'b') {
-      event.preventDefault()
-      applyAction('bold')
-    } else if (key === 'i') {
-      event.preventDefault()
-      applyAction('italic')
-    } else if (key === 'k') {
-      event.preventDefault()
-      applyAction('link')
-    }
-  }
-
   function handleTaskToggle(index: number) {
-    value = toggleTask(value, index)
+    value = toggleTask(currentValue(), index)
   }
 
   function save() {
-    if (dirty && !saving) onsave(value)
+    if (dirty && !saving) onsave(currentValue())
   }
+
+  onMount(() => {
+    if (!host) return
+
+    const attributes: Record<string, string> = {
+      'aria-label': ariaLabel,
+      autocomplete: 'off',
+      autocapitalize: 'off',
+      autocorrect: 'off',
+      spellcheck: 'false',
+    }
+    if (ariaDescribedBy) attributes['aria-describedby'] = ariaDescribedBy
+
+    view = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          history(),
+          drawSelection(),
+          highlightSpecialChars(),
+          EditorView.lineWrapping,
+          editorPlaceholder(placeholder),
+          EditorView.contentAttributes.of(attributes),
+          markdownEditorTheme,
+          markdownLineDecorations,
+          readOnly.of(EditorState.readOnly.of(saving)),
+          keymap.of([
+            {
+              key: 'Mod-b',
+              run: () => {
+                applyAction('bold')
+                return true
+              },
+            },
+            {
+              key: 'Mod-i',
+              run: () => {
+                applyAction('italic')
+                return true
+              },
+            },
+            {
+              key: 'Mod-k',
+              run: () => {
+                openLink()
+                return true
+              },
+            },
+            {
+              key: 'Mod-Enter',
+              run: () => {
+                save()
+                return true
+              },
+            },
+            {
+              key: 'Escape',
+              run: () => {
+                oncancel()
+                return true
+              },
+            },
+            ...defaultKeymap,
+            ...historyKeymap,
+          ]),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && !syncing) {
+              value = update.state.doc.toString()
+            }
+          }),
+        ],
+      }),
+    })
+
+    return () => {
+      view?.destroy()
+      view = null
+    }
+  })
+
+  $effect(() => {
+    const next = value
+    const editor = view
+    if (!editor || editor.state.doc.toString() === next) return
+    syncing = true
+    const length = next.length
+    const range = editor.state.selection.main
+    editor.dispatch({
+      changes: { from: 0, to: editor.state.doc.length, insert: next },
+      selection: {
+        anchor: Math.min(range.anchor, length),
+        head: Math.min(range.head, length),
+      },
+    })
+    syncing = false
+  })
+
+  $effect(() => {
+    const editor = view
+    if (!editor) return
+    editor.dispatch({
+      effects: readOnly.reconfigure(EditorState.readOnly.of(saving)),
+    })
+  })
+
+  $effect(() => {
+    if (mode !== 'write') return
+    void tick().then(() => view?.requestMeasure())
+  })
+
+  $effect(() => {
+    if (codeBlockOpen) {
+      codeBlockWasOpen = true
+      return
+    }
+    if (!codeBlockWasOpen) return
+    codeBlockWasOpen = false
+    void tick().then(() => view?.focus())
+  })
+
+  $effect(() => {
+    if (linkOpen) {
+      linkWasOpen = true
+      return
+    }
+    if (!linkWasOpen) return
+    linkWasOpen = false
+    void tick().then(() => view?.focus())
+  })
+
+  $effect(() => {
+    if (imageOpen) {
+      imageWasOpen = true
+      return
+    }
+    if (!imageWasOpen) return
+    imageWasOpen = false
+    void tick().then(() => view?.focus())
+  })
 </script>
 
-<div class="overflow-hidden rounded-[10px] border border-brand/60 bg-[var(--surface-1)] shadow-[0_0_0_3px_rgba(255,164,67,.10)]">
+<div class="overflow-hidden rounded-[10px] border border-brand/60 bg-[var(--surface-1)] shadow-[0_0_0_3px_rgba(255,164,67,.10)]" style="--editor-min-h: {compact ? '8rem' : '16rem'}">
   <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border px-2 py-1.5">
     <MarkdownToolbar onaction={applyAction} disabled={saving || mode === 'preview'} />
     <div class="flex items-center gap-0.5 rounded-lg border border-border bg-[var(--bg-2)] p-0.5" role="tablist" aria-label="Editor view">
@@ -234,22 +417,19 @@
     </div>
   </div>
 
-  {#if mode === 'write'}
-    <div role="tabpanel" aria-label="Markdown source">
-      <textarea
-        bind:this={editor}
-        bind:value
-        readonly={saving}
-        class="min-h-64 w-full resize-y border-0 bg-transparent px-3 py-3 font-mono text-[13px] leading-relaxed text-foreground placeholder:text-[var(--text-3)] focus:outline-none"
-        placeholder="Write with Markdown, or use the toolbar above."
-        onkeydown={handleKeydown}
-      ></textarea>
-    </div>
-  {:else}
-    <div role="tabpanel" aria-label="Markdown preview" class="min-h-64 px-3 py-3">
+  <div role="tabpanel" aria-label="Markdown source" class={mode === 'write' ? 'block' : 'hidden'}>
+    <div
+      bind:this={host}
+      data-testid="markdown-editor"
+      class="markdown-editor"
+    ></div>
+  </div>
+
+  <div role="tabpanel" aria-label="Markdown preview" class={mode === 'preview' ? 'block' : 'hidden'}>
+    <div class="px-3 py-3" style="min-height: var(--editor-min-h)">
       <MarkdownRenderer source={value} interactive ontasktoggle={handleTaskToggle} />
     </div>
-  {/if}
+  </div>
 
   {#if error}
     <p class="mx-3 mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{error}</p>
@@ -259,13 +439,15 @@
     <span class="text-[11px] text-[var(--text-3)]">Markdown · Cmd/Ctrl+Enter to save</span>
     <div class="flex gap-2">
       <Button variant="secondary" disabled={saving} onclick={oncancel}>Cancel</Button>
-      <Button disabled={!dirty || saving} onclick={save}>{saving ? 'Saving…' : 'Save description'}</Button>
+      <Button disabled={!dirty || saving} onclick={save}>{saving ? 'Saving…' : submitLabel}</Button>
     </div>
   </div>
 </div>
 
+<CodeBlockDialog bind:open={codeBlockOpen} oninsert={insertCodeBlock} />
+
 <Modal bind:open={linkOpen} title="Insert link" description="Add a link to the description.">
-  <form id="markdown-link" class="space-y-4" onsubmit={(event) => { event.preventDefault(); void insertLink() }}>
+  <form id="markdown-link" class="space-y-4" onsubmit={(event) => { event.preventDefault(); insertLink() }}>
     <div>
       <label class={labelClass} for="markdown-link-text">Text</label>
       <input id="markdown-link-text" class={inputClass} bind:value={linkText} placeholder="Link text" />
@@ -285,7 +467,7 @@
 </Modal>
 
 <Modal bind:open={imageOpen} title="Insert image" description="Use an external https:// image URL.">
-  <form id="markdown-image" class="space-y-4" onsubmit={(event) => { event.preventDefault(); void insertImage() }}>
+  <form id="markdown-image" class="space-y-4" onsubmit={(event) => { event.preventDefault(); insertImage() }}>
     <div>
       <label class={labelClass} for="markdown-image-alt">Alt text</label>
       <input id="markdown-image-alt" class={inputClass} bind:value={imageAlt} placeholder="Describe the image" />

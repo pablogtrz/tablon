@@ -74,6 +74,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
 ## Constraints
 
 - Go 1.27.4, Node 22.23.4, pnpm 11.2.2, SQLite WAL.
+- License: AGPL-3.0-only.
 - Pure-Go SQLite driver for CGO-free cross-platform builds.
 - No heavy dependencies; no React, Radix, dnd-kit, TanStack or date-fns.
 - Dark only.
@@ -168,3 +169,62 @@ Deferred and known limits:
 - Firefox and Safari below 27 get the plain native select; no polyfill.
 - Comments and board remain in M2.
 - The temporary Playwright diagnostic dependency was removed after verification.
+
+
+## M2 checkpoint — 2026-11-24
+
+Delivered:
+
+- Comments API with chronological pagination, edit/delete, cascade and agent ids.
+- `Idempotency-Key` for POST issues and comments, with 24h replay storage and conflict handling.
+- Four-column board (`Todo`, `In Progress`, `In Review`, `Done`) with native HTML5 drag, optimistic persistence, mobile snap scrolling and hidden backlog/canceled counts.
+- Board keyboard movement (`Alt+ArrowLeft/Right`), a six-status move menu, focus restoration and polite announcements.
+- Comments UI on issue detail: Markdown composer, chronological list, agent/local label, edited marker, inline edit, confirm delete and focus management.
+- `tablon` CLI with projects, epics, issues, comments, claim/release, JSON and compact output, predictable exit codes and idempotent creates.
+- Distributable `agent-instructions/AGENTS.md` and its docs-index entry.
+- Per-project SSE stream with an in-process hub, heartbeat, reconnect/refetch, visibility handling and polite live regions.
+- Vitest component/unit tests and Playwright smoke coverage for board, comments, unsaved guards, auth and responsive layout.
+
+Verified:
+
+- `go test ./...`, `go vet ./...`, `go test -race ./...`.
+- `pnpm check`, `pnpm test` (23 tests), `pnpm build`.
+- `pnpm test:e2e` (6 Chromium tests) against a token-enabled Go server.
+- CLI smoke against a temporary server: project create, issue create/list/get, comment create/list, claim/release, JSON output.
+- No horizontal page overflow at 360, 390, 768, 1024 and 1440px on dashboard, project, board and issue detail.
+- Initial JS: 187.13 kB raw / 60.81 kB gzip; issue chunk: 122.11 kB / 40.01 kB gzip; CSS: 45.94 kB / 10.09 kB gzip.
+
+Known limits:
+
+- SSE has no event replay or `Last-Event-ID`; reconnect always refetches.
+- Playwright runs Chromium only; the browser matrix and CI wiring remain in M3.
+- Board loads at most 1,000 project issues; comments load in pages of 200 with a load-more control.
+- Idempotent replays are resolved after resource validation; retrying after the target issue/project is deleted returns not found.
+- No commits or PRs yet; review is pending.
+
+
+## M2 editor expansion — 2026-11-24
+
+Delivered:
+
+- Replaced the Markdown textarea with a CodeMirror 6 editing surface in descriptions and comments.
+- Added custom Markdown decorations for headings, bold/italic/strikethrough, inline code, links, list/task markers, quotes, rules and fenced code blocks. Markdown markers stay visible.
+- Kept the existing toolbar, Write/Preview tabs, undo/redo, shortcuts, dirty state, unsaved guards and comment/description reuse.
+- Added `CodeBlockDialog` with an optional language and a custom language input.
+- Added language headers and keyboard-accessible Copy actions to rendered code blocks, with polite copy feedback and DOMPurify-safe DOM construction.
+- Moved editor state behind a controller API (focus, selection, replace, prefix, insert) and added pure action/scan tests.
+
+Verified:
+
+- `pnpm check`, `pnpm test` (40 tests), `pnpm build`.
+- `pnpm test:e2e` with 4 workers (8 Chromium tests), including rich Markdown editing, code block insertion/copy, comments, guards, SSE and layout.
+- Initial JS: 187.53 kB raw / 60.98 kB gzip (materially unchanged from 187.13 / 60.81).
+- IssueView chunk: 410.11 kB raw / 134.16 kB gzip, lazy-loaded only on issue detail.
+- CSS: 49.08 kB raw / 10.58 kB gzip.
+
+Known limits:
+
+- The custom highlighter is regex/line based, not a full Markdown parser; unusual nested constructs may be styled conservatively.
+- No split editor/preview pane yet.
+- Fenced code blocks have language labels but no language-specific syntax highlighting.
+- CodeMirror adds about 287 kB raw to the lazy IssueView chunk; the initial bundle is unchanged.

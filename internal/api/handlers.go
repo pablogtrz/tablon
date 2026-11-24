@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 
@@ -262,23 +264,35 @@ func (s *Server) listIssues(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createIssue(w http.ResponseWriter, r *http.Request) {
 	var req createIssueRequest
-	if err := decodeJSON(w, r, &req); err != nil {
+	raw, err := decodeJSONWithBody(w, r, &req)
+	if err != nil {
 		writeDecodeError(w, err)
 		return
 	}
-	i, err := s.svc.CreateIssue(r.Context(), r.PathValue("projectRef"), service.CreateIssueInput{
-		Title:       req.Title,
-		Description: req.Description,
-		Status:      req.Status,
-		Priority:    req.Priority,
-		EpicID:      req.EpicID,
-		AgentID:     req.AgentID,
-	})
+	i, _, err := s.svc.CreateIssueIdempotent(
+		r.Context(),
+		r.PathValue("projectRef"),
+		service.CreateIssueInput{
+			Title:       req.Title,
+			Description: req.Description,
+			Status:      req.Status,
+			Priority:    req.Priority,
+			EpicID:      req.EpicID,
+			AgentID:     req.AgentID,
+		},
+		r.Header.Get("Idempotency-Key"),
+		requestFingerprint(r, raw),
+	)
 	if err != nil {
 		handleError(w, s.logger, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, i)
+}
+
+func requestFingerprint(r *http.Request, raw []byte) string {
+	sum := sha256.Sum256([]byte(r.Method + "\n" + r.URL.Path + "\n" + string(raw)))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Server) getIssue(w http.ResponseWriter, r *http.Request) {
@@ -359,6 +373,83 @@ func (s *Server) releaseIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, i)
+}
+
+type createCommentRequest struct {
+	Content string  `json:"content"`
+	AgentID *string `json:"agent_id"`
+}
+
+type updateCommentRequest struct {
+	Content *string `json:"content"`
+}
+
+func (s *Server) listComments(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			writeError(w, http.StatusBadRequest, "invalid_query", "limit must be a positive integer", nil)
+			return
+		}
+		limit = value
+	}
+	page, err := s.svc.ListComments(
+		r.Context(),
+		r.PathValue("issueRef"),
+		limit,
+		r.URL.Query().Get("cursor"),
+	)
+	if err != nil {
+		handleError(w, s.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) createComment(w http.ResponseWriter, r *http.Request) {
+	var req createCommentRequest
+	raw, err := decodeJSONWithBody(w, r, &req)
+	if err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	c, _, err := s.svc.CreateCommentIdempotent(
+		r.Context(),
+		r.PathValue("issueRef"),
+		service.CreateCommentInput{Content: req.Content, AgentID: req.AgentID},
+		r.Header.Get("Idempotency-Key"),
+		requestFingerprint(r, raw),
+	)
+	if err != nil {
+		handleError(w, s.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
+}
+
+func (s *Server) updateComment(w http.ResponseWriter, r *http.Request) {
+	var req updateCommentRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	c, err := s.svc.UpdateComment(r.Context(), r.PathValue("commentRef"), service.UpdateCommentInput{
+		Content: req.Content,
+	})
+	if err != nil {
+		handleError(w, s.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (s *Server) deleteComment(w http.ResponseWriter, r *http.Request) {
+	if err := s.svc.DeleteComment(r.Context(), r.PathValue("commentRef")); err != nil {
+		handleError(w, s.logger, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func queryBool(r *http.Request, key string) (bool, error) {

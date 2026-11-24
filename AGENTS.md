@@ -20,6 +20,8 @@ Tablon is an open-source, lightweight, AI-first issue tracker: a Linear alternat
 | UI, CSS, layout, color, motion, components, accessibility | `docs/design-system.md` |
 | Design tokens and base styles | `frontend/src/app.css` |
 | Frontend commands | `frontend/README.md` |
+| Writing agent instructions for target repos, CLI workflow | `agent-instructions/AGENTS.md` |
+| Project overview, stack and license | `README.md` |
 | Product scope, decisions and contracts | `docs/product/build-brief.md` |
 | Architecture and data model | `docs/architecture.md` (planned) |
 
@@ -29,9 +31,10 @@ Add new docs to this index. Keep each doc short and focused; link instead of rep
 
 - Go module: `github.com/pablogtrz/tablon`.
 - `frontend/` — Svelte 5 + TypeScript + Vite + Tailwind v4.
-- `cmd/server/`, `cmd/pm/`, `internal/` — Go server and CLI (planned).
-- `migrations/` — SQLite migrations (planned).
+- `cmd/server/`, `cmd/tablon/`, `internal/` — Go server and CLI.
+- `migrations/` — SQLite migrations.
 - `docs/` — agent docs.
+- `agent-instructions/` — distributable `AGENTS.md` template for target repos.
 - `data/` — runtime database (gitignored).
 
 ## Commands
@@ -42,6 +45,8 @@ cd frontend && pnpm check    # types + lint
 cd frontend && pnpm test     # unit tests
 cd frontend && pnpm build    # static assets
 go run ./cmd/server          # API on 127.0.0.1:8080
+go run ./cmd/tablon --help   # CLI
+go test ./...                # backend + CLI tests
 go test ./...                # backend + CLI tests
 docker compose up --build    # container
 ```

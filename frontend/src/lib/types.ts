@@ -116,6 +116,15 @@ export interface Issue {
   updated_at: string
 }
 
+export interface Comment {
+  id: string
+  issue_id: string
+  content: string
+  agent_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Page<T> {
   items: T[]
   next_cursor?: string

@@ -129,6 +129,38 @@ export function renderMarkdown(source: string): DocumentFragment {
     wrapper.append(table)
   }
 
+  for (const pre of [...fragment.querySelectorAll('pre')]) {
+    const code = pre.querySelector('code')
+    if (!code) continue
+    const languageClass = [...code.classList].find((name) => name.startsWith('language-'))
+    const language = languageClass ? languageClass.slice('language-'.length) : ''
+    const wrapper = document.createElement('div')
+    wrapper.className = 'markdown-codeblock'
+    wrapper.dataset.language = language
+
+    const header = document.createElement('div')
+    header.className = 'markdown-codeblock-header'
+
+    const label = document.createElement('span')
+    label.className = 'markdown-codeblock-lang'
+    label.textContent = language || 'Code'
+
+    const status = document.createElement('span')
+    status.className = 'markdown-codeblock-status'
+    status.setAttribute('role', 'status')
+    status.setAttribute('aria-live', 'polite')
+
+    const copy = document.createElement('button')
+    copy.type = 'button'
+    copy.className = 'markdown-codeblock-copy'
+    copy.textContent = 'Copy'
+    copy.setAttribute('aria-label', `Copy ${language || 'code'} block`)
+
+    header.append(label, status, copy)
+    pre.replaceWith(wrapper)
+    wrapper.append(header, pre)
+  }
+
   return fragment
 }
 

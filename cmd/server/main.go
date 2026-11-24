@@ -13,6 +13,7 @@ import (
 
 	"github.com/pablogtrz/tablon/internal/api"
 	"github.com/pablogtrz/tablon/internal/config"
+	"github.com/pablogtrz/tablon/internal/events"
 	"github.com/pablogtrz/tablon/internal/service"
 	"github.com/pablogtrz/tablon/internal/store"
 )
@@ -34,8 +35,10 @@ func main() {
 	}
 	defer st.Close()
 
-	svc := service.New(st)
-	handler := api.New(cfg, svc, logger)
+	hub := events.NewHub(logger)
+	defer hub.Close()
+	svc := service.New(st, hub)
+	handler := api.New(cfg, svc, hub, logger)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
