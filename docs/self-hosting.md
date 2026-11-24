@@ -41,7 +41,7 @@ TABLON_DATA_DIR=./data ./tablond
 
 Open `http://127.0.0.1:8448`. The CLI is published separately as
 `tablon-cli_VERSION_OS_ARCH.tar.gz`; alternatively run
-`go install github.com/pablogtrz/tablon/cmd/tablon@latest`.
+`go install github.com/pablogtrz/tablon/cli/tablon@latest`.
 
 Verify a binary without starting the server:
 

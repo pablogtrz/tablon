@@ -28,7 +28,7 @@ builds:
       - -X github.com/pablogtrz/tablon/internal/version.Date={{ .CommitDate }}
 
   - id: tablon
-    main: ./cmd/tablon
+    main: ./cli/tablon
     binary: tablon
     env:
       - CGO_ENABLED=0
@@ -68,6 +68,7 @@ archives:
       - LICENSE
       - README.md
       - docs/self-hosting.md
+      - cli/README.md
 
   - id: cli
     ids:
@@ -83,6 +84,7 @@ archives:
     files:
       - LICENSE
       - README.md
+      - cli/README.md
 
 checksum:
   name_template: SHA256SUMS

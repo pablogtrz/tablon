@@ -199,7 +199,7 @@ jobs:
           mkdir -p "$dir"
           ldflags="-s -w -X github.com/pablogtrz/tablon/internal/version.Version=ci -X github.com/pablogtrz/tablon/internal/version.Commit=${{ github.sha }}"
           CGO_ENABLED=0 go build -trimpath -tags embed -ldflags "$ldflags" -o "$dir/tablond${ext}" ./cmd/server
-          CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dir/tablon${ext}" ./cmd/tablon
+          CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$dir/tablon${ext}" ./cli/tablon
           test -s "$dir/tablond${ext}"
           test -s "$dir/tablon${ext}"
           go version -m "$dir/tablond${ext}"

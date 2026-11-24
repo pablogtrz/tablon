@@ -55,7 +55,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
   - M2: board, comments edit/delete, CLI, `AGENTS.md`, SSE.
   - M3: idle mode, Docker, CI, release.
   - GitHub sits after M3, in v0.2.
-- **Repo (model):** `cmd/server`, `cmd/cli`, `internal/`, `frontend/`, `migrations/`, `docs/`. `tmp/` remains gitignored and untracked. `.opencode/`, `.agents/`, `skills-lock.json` and `tmp/` are ignored; `opencode.json` is tracked.
+- **Repo (model):** `cmd/server`, `internal/`, `cli/`, `agent/`, `frontend/`, `migrations/`, `docs/`. `tmp/` remains gitignored and untracked. `.opencode/`, `.agents/`, `skills-lock.json` and `tmp/` are ignored; `opencode.json` is tracked.
 - **Environment (model):** `TABLON_*` for the server, `TABLON_CLI_URL` and `TABLON_CLI_TOKEN` for the CLI, `GITHUB_*` when GitHub returns. Go 1.27.4 at `~/sdk/go`; Node 22 via `.nvmrc`.
 
 ## Out of scope
@@ -181,7 +181,7 @@ Delivered:
 - Board keyboard movement (`Alt+ArrowLeft/Right`), a six-status move menu, focus restoration and polite announcements.
 - Comments UI on issue detail: Markdown composer, chronological list, agent/local label, edited marker, inline edit, confirm delete and focus management.
 - `tablon` CLI with projects, epics, issues, comments, claim/release, JSON and compact output, predictable exit codes and idempotent creates.
-- Distributable `agent-instructions/AGENTS.md` and its docs-index entry.
+- Distributable `agent/Tablon.md` adapter, client wrappers and its docs-index entry.
 - Per-project SSE stream with an in-process hub, heartbeat, reconnect/refetch, visibility handling and polite live regions.
 - Vitest component/unit tests and Playwright smoke coverage for board, comments, unsaved guards, auth and responsive layout.
 
@@ -240,7 +240,7 @@ Delivered:
 - Docker: multi-stage Alpine image, non-root UID/GID 10001, read-only root, cap drop, `/data` named volume, `/health` healthcheck, OCI labels; Compose loopback defaults; `.env.example`; no Node runtime.
 - CI: backend tests/vet/race/migrations/benchmark compile, frontend check/test/build, Playwright Chromium/Firefox/WebKit, embedded binary smoke, Docker smoke, five-target cross-builds and GoReleaser config check.
 - Release: `internal/version` ldflags, `tablond --version`, `tablon version`/`--version`, GoReleaser bundle (server + CLI) and CLI-only archives, `SHA256SUMS`, grouped notes, multi-arch GHCR image with SBOM/provenance.
-- Benchmarks: store/API benchmarks, query-plan assertions, `scripts/bench.sh`, and recorded results in `docs/performance.md`.
+- Benchmarks: store/API benchmarks, query-plan assertions, `scripts/bench.sh`, `scripts/bench-runtime.sh`, `scripts/bench-tokens.py`, and recorded results in `docs/performance.md`.
 - Self-hosting and release docs: `docs/self-hosting.md`, `docs/release.md`, README quick starts, AGENTS index, browser install and smoke instructions.
 
 Verified:
@@ -252,12 +252,11 @@ Verified:
 - `goreleaser check`, `goreleaser build --snapshot --clean`, and `goreleaser release --snapshot --clean` (10 archives + `SHA256SUMS`; versions injected).
 - `docker compose config`.
 - `scripts/bench.sh`: startup 0.06-0.08 s, RSS 9.0-9.3 MB at start, 12.8-12.9 MB after workload, 13.0-14.0 MB idle, first request after idle 0.030-0.036 s; binary 11.9 MB.
-- Raspberry Pi 4 arm64: Docker image built on the Pi, Compose healthy with the real local database (3 projects, 6 epics, 42 issues, 21 comments), persisted across restart, read-only/non-root/no-Node hardening verified, SPA/deep links/OpenAPI served, idle status observed. Native benchmark: startup 0.160-0.162 s, RSS 10.4-10.6 MB at start, 14.5-14.6 MB after workload, 14.7-14.8 MB idle, first request after idle 0.102-0.103 s. Image 31.9 MB; container process RSS 10.4 MB idle / 11.1 MB active.
+- Raspberry Pi 4 arm64: `tablon:bench` built on the Pi; `scripts/bench-runtime.sh` measured native vs Docker across seven runs. Native startup 0.159-0.175 s, Docker 1.15-1.71 s; peak RSS 14.3-14.5 MiB on both; data 4.1 MiB while working and 0.2 MiB after idle; binary 11.2 MiB, image 30.4 MiB. The five-step token benchmark measured 1,804 tokens for the adapter/CLI path versus 10,424 for external REST. Full data in `docs/performance.md`.
 
 Known limits:
 
-- The Docker image was built and smoke-tested on the Raspberry Pi 4 arm64; the local Mac Docker daemon was unavailable. The CI `docker` job remains the repeatable check.
-- Idle mode does not materially reduce RSS at this workload. Forced `debug.FreeOSMemory` was removed after it increased RSS; the activity gate is the durable part.
+- Idle mode does not materially reduce RSS at this workload. It does checkpoint/truncate the SQLite WAL, reducing working storage from about 4.1 MiB to about 0.2 MiB. Forced `debug.FreeOSMemory` was removed after it increased RSS; the activity gate is the durable part.
 - Release artifacts were verified with a snapshot only; the first tagged release and GHCR push remain pending review/approval.
 - A server binary without `-tags embed` serves the API but not the SPA.
 - Benchmark figures are from one machine; use `-count` and medians before treating them as gates.
