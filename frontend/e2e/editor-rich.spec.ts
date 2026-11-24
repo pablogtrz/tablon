@@ -8,6 +8,11 @@ import {
   type TestProject,
 } from './helpers'
 
+test.skip(
+  ({ browserName }) => browserName !== 'chromium',
+  'clipboard permissions are Chromium-only in the smoke suite',
+)
+
 test('styles Markdown and inserts a copyable code block', async ({ page, context, request }) => {
   let project: TestProject | null = null
   let issue: TestIssue | null = null
