@@ -35,7 +35,8 @@ coverage.out
 
 # Node
 node_modules/
-frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep
 frontend/.vite/
 frontend/test-results/
 frontend/playwright-report/
