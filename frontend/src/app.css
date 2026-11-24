@@ -72,6 +72,17 @@
   --priority-low: #8ab4ff;
   --priority-none: #8a9490;
 
+  /* Priority soft surfaces */
+  --priority-urgent-soft: rgba(255, 107, 107, 0.14);
+  --priority-high-soft: rgba(255, 154, 98, 0.14);
+  --priority-medium-soft: rgba(245, 213, 71, 0.14);
+  --priority-low-soft: rgba(138, 180, 255, 0.14);
+  --priority-none-soft: rgba(138, 148, 144, 0.12);
+
+  /* Epic done card */
+  --epic-done-bg: rgba(110, 231, 176, 0.055);
+  --epic-done-border: rgba(110, 231, 176, 0.18);
+
   /* Agent */
   --agent: #67d4f5;
 
@@ -323,6 +334,41 @@
 
 @utility tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Determinate progress rail used by epics. */
+progress.epic-progress {
+  appearance: none;
+  display: block;
+  inline-size: 100%;
+  block-size: 5px;
+  border: 0 solid;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.09);
+  overflow: clip;
+}
+
+progress.epic-progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+progress.epic-progress::-webkit-progress-value {
+  border-radius: var(--r-full);
+  background: var(--progress-fill, var(--brand));
+  transition: inline-size var(--dur-slower) var(--ease);
+}
+
+progress.epic-progress::-moz-progress-bar {
+  border-radius: var(--r-full);
+  background: var(--progress-fill, var(--brand));
+  transition: inline-size var(--dur-slower) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  progress.epic-progress::-webkit-progress-value,
+  progress.epic-progress::-moz-progress-bar {
+    transition: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

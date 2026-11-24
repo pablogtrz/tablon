@@ -38,6 +38,7 @@ export interface StatusMeta {
 export interface PriorityMeta {
   label: string
   tone: string
+  soft: string
   icon: Component
 }
 
@@ -91,26 +92,31 @@ export const PRIORITY_META: Record<IssuePriority, PriorityMeta> = {
   urgent: {
     label: ISSUE_PRIORITY_LABELS.urgent,
     tone: ISSUE_PRIORITY_TONES.urgent,
+    soft: 'var(--priority-urgent-soft)',
     icon: Flame,
   },
   high: {
     label: ISSUE_PRIORITY_LABELS.high,
     tone: ISSUE_PRIORITY_TONES.high,
+    soft: 'var(--priority-high-soft)',
     icon: SignalHigh,
   },
   medium: {
     label: ISSUE_PRIORITY_LABELS.medium,
     tone: ISSUE_PRIORITY_TONES.medium,
+    soft: 'var(--priority-medium-soft)',
     icon: SignalMedium,
   },
   low: {
     label: ISSUE_PRIORITY_LABELS.low,
     tone: ISSUE_PRIORITY_TONES.low,
+    soft: 'var(--priority-low-soft)',
     icon: SignalLow,
   },
   none: {
     label: ISSUE_PRIORITY_LABELS.none,
     tone: ISSUE_PRIORITY_TONES.none,
+    soft: 'var(--priority-none-soft)',
     icon: Minus,
   },
 }

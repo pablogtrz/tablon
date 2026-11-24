@@ -18,12 +18,13 @@
   import ProjectStatusBadge from '$lib/components/tablon/ProjectStatusBadge.svelte'
   import { deleteEpic, deleteProject, getProject, listAllIssues, listEpics, listIssues, updateIssueStatus } from '$lib/api'
   import { applyBoardMove } from '$lib/board'
+  import { burstConfetti } from '$lib/confetti'
   import { subscribeProjectEvents } from '$lib/events'
   import type { ProjectEvent } from '$lib/events'
   import type { HiddenBoardStatus } from '$lib/board'
   import { messageOf } from '$lib/errors'
   import { relativeTime } from '$lib/format'
-  import { issuePath, navigate } from '$lib/router.svelte'
+  import { issuePath, epicPath, navigate } from '$lib/router.svelte'
   import type { Epic, Issue, IssueStatus, Project } from '$lib/types'
 
   let { projectRef }: { projectRef: string } = $props()
@@ -47,6 +48,11 @@
   let movingIssueIds = $state<string[]>([])
   let liveMessage = $state('')
   let eventTimer: ReturnType<typeof setTimeout> | null = null
+
+  let epicIssues = $state<Issue[]>([])
+  let epicIssuesLoading = $state(false)
+  let epicIssuesError = $state('')
+  let epicIssuesTruncated = $state(false)
 
   let statusFilter = $state('')
   let priorityFilter = $state('')
@@ -124,6 +130,20 @@
     }
   }
 
+  async function loadEpicIssues() {
+    epicIssuesLoading = true
+    epicIssuesError = ''
+    try {
+      const result = await listAllIssues(apiRef)
+      epicIssues = result.items
+      epicIssuesTruncated = result.truncated
+    } catch (err) {
+      epicIssuesError = messageOf(err)
+    } finally {
+      epicIssuesLoading = false
+    }
+  }
+
   async function moveBoardIssue(issue: Issue, status: IssueStatus): Promise<boolean> {
     if (movingIssueIds.includes(issue.id)) return false
     const previous = boardIssues
@@ -137,6 +157,9 @@
     try {
       const updated = await updateIssueStatus(issue.identifier, status)
       boardIssues = boardIssues.map((item) => (item.id === updated.id ? updated : item))
+      if (status === 'done' && previousIssue.status !== 'done') {
+        burstConfetti()
+      }
       return true
     } catch (err) {
       boardIssues = boardIssues.map((item) => (item.id === issue.id ? previousIssue : item))
@@ -153,6 +176,8 @@
       void loadBoard()
     } else if (next === 'issues') {
       void loadIssues()
+    } else {
+      void loadEpicIssues()
     }
   }
 
@@ -172,6 +197,8 @@
       eventTimer = null
       if (tab === 'board') {
         void loadBoard()
+      } else if (tab === 'epics') {
+        void loadEpicIssues()
       } else {
         void loadIssues()
       }
@@ -294,7 +321,7 @@
       await deleteEpic(deletingEpic.id)
       deleteEpicOpen = false
       deletingEpic = null
-      await Promise.all([reloadEpics(), loadIssues()])
+      await Promise.all([reloadEpics(), loadIssues(), loadEpicIssues()])
     } catch (err) {
       deleteError = messageOf(err)
     } finally {
@@ -312,6 +339,11 @@
 
   function onEpicSaved() {
     void reloadEpics()
+    if (tab === 'epics') void loadEpicIssues()
+  }
+
+  function openEpic(epic: Epic) {
+    void navigate(epicPath(apiRef, epic.id))
   }
 
   onMount(() => {
@@ -488,7 +520,26 @@
           </div>
         {:else}
           <div role="tabpanel" aria-label="Epics">
-            <EpicList {epics} loading={false} onedit={openEditEpic} ondelete={openDeleteEpic} />
+            {#if epicIssuesError}
+              <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+                {epicIssuesError}
+              </div>
+            {/if}
+            {#if epicIssuesTruncated}
+              <p class="mb-3 rounded-lg border border-border bg-[var(--surface-1)] px-3 py-2 text-[11px] text-[var(--text-3)]">
+                Showing task counts from the first 1,000 issues.
+              </p>
+            {/if}
+            <EpicList
+              projectRef={apiRef}
+              {epics}
+              issues={epicIssues}
+              loading={false}
+              statsLoading={epicIssuesLoading}
+              onopen={openEpic}
+              onedit={openEditEpic}
+              ondelete={openDeleteEpic}
+            />
           </div>
         {/if}
       </div>

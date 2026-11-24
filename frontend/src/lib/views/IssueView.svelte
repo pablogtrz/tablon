@@ -8,7 +8,7 @@
   import Button from '$lib/components/tablon/Button.svelte'
   import CommentsSection from '$lib/components/tablon/CommentsSection.svelte'
   import ConfirmModal from '$lib/components/tablon/ConfirmModal.svelte'
-  import IdChip from '$lib/components/tablon/IdChip.svelte'
+  import IssueId from '$lib/components/tablon/IssueId.svelte'
   import MarkdownEditor from '$lib/components/tablon/MarkdownEditor.svelte'
   import MarkdownRenderer from '$lib/components/tablon/MarkdownRenderer.svelte'
   import Select from '$lib/components/tablon/Select.svelte'
@@ -434,7 +434,7 @@
     </a>
 
     <div class="flex flex-wrap items-center gap-2">
-      <IdChip identifier={issue.identifier} />
+      <IssueId identifier={issue.identifier} class="text-sm" />
       {#if issue.agent_id}
         <AgentChip agentId={issue.agent_id} />
       {/if}

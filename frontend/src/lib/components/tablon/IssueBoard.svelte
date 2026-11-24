@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import BoardCard from './BoardCard.svelte'
   import Button from './Button.svelte'
   import {
@@ -7,12 +7,16 @@
     boardStatusLabel,
     groupBoardIssues,
     hiddenBoardCounts,
-    isBoardStatus,
+    visibleBoardColumns,
+    visibleBoardStatuses,
   } from '$lib/board'
-  import type { BoardColumn, HiddenBoardStatus } from '$lib/board'
+  import type { BoardColumn, HiddenBoardStatus, VisibleBoardStatus } from '$lib/board'
+  import { readBooleanPreference, writeBooleanPreference } from '$lib/preferences'
   import { issuePath } from '$lib/router.svelte'
   import { cn } from '$lib/utils'
   import type { Epic, Issue, IssueStatus } from '$lib/types'
+
+  const DONE_PREVIEW_LIMIT = 10
 
   let {
     projectRef,
@@ -36,18 +40,25 @@
 
   let board = $state<HTMLDivElement>()
   let draggingId = $state<string | null>(null)
-  let dragOver = $state<IssueStatus | null>(null)
+  let dragOver = $state<VisibleBoardStatus | null>(null)
   let announcement = $state('')
+  let includeBacklog = $state(false)
+  let doneExpanded = $state(false)
 
-  const grouped = $derived(groupBoardIssues(issues))
-  const hidden = $derived(hiddenBoardCounts(issues))
+  const visibleStatuses = $derived(visibleBoardStatuses(includeBacklog))
+  const grouped = $derived(groupBoardIssues(issues, includeBacklog))
+  const hidden = $derived(hiddenBoardCounts(issues, includeBacklog))
   const epicMap = $derived(new Map(epics.map((epic) => [epic.id, epic.title])))
-  const columns = $derived<Array<BoardColumn & { items: Issue[] }>>([
-    { status: 'todo', label: 'Todo', items: grouped.todo },
-    { status: 'in-progress', label: 'In Progress', items: grouped['in-progress'] },
-    { status: 'in-review', label: 'In Review', items: grouped['in-review'] },
-    { status: 'done', label: 'Done', items: grouped.done },
-  ])
+  const columns = $derived<Array<BoardColumn & { items: Issue[] }>>(
+    visibleBoardColumns(includeBacklog).map((column) => ({
+      ...column,
+      items: grouped[column.status],
+    })),
+  )
+
+  onMount(() => {
+    includeBacklog = readBooleanPreference('board.showBacklog', false)
+  })
 
   async function announce(message: string) {
     announcement = ''
@@ -60,6 +71,13 @@
     return epicMap.get(issue.epic_id) ?? ''
   }
 
+  function columnItems(column: BoardColumn & { items: Issue[] }): Issue[] {
+    if (column.status === 'done' && !doneExpanded) {
+      return column.items.slice(0, DONE_PREVIEW_LIMIT)
+    }
+    return column.items
+  }
+
   function handleDragStart(issue: Issue, event: DragEvent) {
     draggingId = issue.id
     if (event.dataTransfer) {
@@ -68,7 +86,7 @@
     }
   }
 
-  function handleDragOver(event: DragEvent, status: IssueStatus) {
+  function handleDragOver(event: DragEvent, status: VisibleBoardStatus) {
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
     dragOver = status
@@ -81,7 +99,7 @@
     dragOver = null
   }
 
-  function handleDrop(event: DragEvent, status: IssueStatus) {
+  function handleDrop(event: DragEvent, status: VisibleBoardStatus) {
     event.preventDefault()
     const id = event.dataTransfer?.getData('text/plain') ?? ''
     const issue = issues.find((item) => item.id === id)
@@ -103,7 +121,7 @@
       await announce(`Could not move ${issue.identifier}`)
     }
 
-    if (isBoardStatus(status)) {
+    if (visibleStatuses.includes(status as VisibleBoardStatus)) {
       board
         ?.querySelector<HTMLElement>(`[data-issue-id="${CSS.escape(issue.id)}"]`)
         ?.focus()
@@ -122,7 +140,7 @@
   }
 
   function handleKeyMove(issue: Issue, direction: -1 | 1) {
-    const next = adjacentBoardStatus(issue.status, direction)
+    const next = adjacentBoardStatus(issue.status, direction, visibleStatuses)
     if (!next) return
     void move(issue, next)
   }
@@ -137,10 +155,25 @@
 </script>
 
 <div>
+  <div class="mb-3 flex flex-wrap items-center gap-3">
+    <label class="inline-flex min-h-10 cursor-pointer items-center gap-2 text-xs text-[var(--text-2)]">
+      <input
+        type="checkbox"
+        class="size-4 cursor-pointer accent-[var(--brand)]"
+        bind:checked={includeBacklog}
+        onchange={() => writeBooleanPreference('board.showBacklog', includeBacklog)}
+      />
+      Show Backlog column
+    </label>
+    {#if columns.length === 5}
+      <span class="text-[11px] text-[var(--text-3)]">The board is showing all five active columns.</span>
+    {/if}
+  </div>
+
   {#if hidden.backlog > 0 || hidden.canceled > 0}
     <div class="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-3)]">
       <span class="tnum">
-        {hidden.backlog} backlog · {hidden.canceled} canceled not shown on the board.
+        {#if hidden.backlog > 0}{hidden.backlog} backlog · {/if}{hidden.canceled} canceled not shown on the board.
       </span>
       {#if hidden.backlog > 0}
         <Button variant="ghost" class="h-7 px-2 text-[11px]" onclick={() => onhidden('backlog')}>
@@ -164,7 +197,10 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     bind:this={board}
-    class="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:px-0"
+    class={cn(
+      '-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-4 pb-3 lg:mx-0 lg:grid lg:gap-4 lg:overflow-visible lg:px-0',
+      includeBacklog ? 'lg:grid-cols-5' : 'lg:grid-cols-4',
+    )}
     role="region"
     aria-label="Issue board"
   >
@@ -196,8 +232,12 @@
           </span>
         </header>
 
-        <ul class="flex min-h-40 flex-col gap-2 p-2" aria-label={`${column.label} issues`}>
-          {#each column.items as issue (issue.id)}
+        <ul
+          id={column.status === 'done' ? 'board-done' : undefined}
+          class="flex min-h-40 flex-col gap-2 p-2"
+          aria-label={`${column.label} issues`}
+        >
+          {#each columnItems(column) as issue (issue.id)}
             <BoardCard
               {issue}
               href={hrefFor(issue)}
@@ -223,6 +263,22 @@
               No issues
             </li>
           {/each}
+
+          {#if column.status === 'done' && column.items.length > DONE_PREVIEW_LIMIT}
+            <li class="list-none">
+              <button
+                type="button"
+                class="flex min-h-10 w-full items-center justify-center rounded-lg border border-border text-[11px] font-medium text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-expanded={doneExpanded}
+                aria-controls="board-done"
+                onclick={() => (doneExpanded = !doneExpanded)}
+              >
+                {doneExpanded
+                  ? 'Show less'
+                  : `See all ${column.items.length}`}
+              </button>
+            </li>
+          {/if}
         </ul>
       </section>
     {/each}

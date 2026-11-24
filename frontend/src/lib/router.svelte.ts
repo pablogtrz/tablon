@@ -1,6 +1,7 @@
 export type Route =
   | { name: 'dashboard' }
   | { name: 'project'; projectRef: string }
+  | { name: 'epic'; projectRef: string; epicRef: string }
   | { name: 'issue'; projectRef: string; issueRef: string }
   | { name: 'settings' }
   | { name: 'not-found' }
@@ -66,6 +67,15 @@ export function parseRoute(path: string): Route {
   if (path === '/' || path === '') return { name: 'dashboard' }
   if (path === '/settings') return { name: 'settings' }
 
+  const epicMatch = path.match(/^\/projects\/([^/]+)\/epics\/([^/]+)$/)
+  if (epicMatch) {
+    return {
+      name: 'epic',
+      projectRef: decodeURIComponent(epicMatch[1]),
+      epicRef: decodeURIComponent(epicMatch[2]),
+    }
+  }
+
   const issueMatch = path.match(/^\/projects\/([^/]+)\/issues\/([^/]+)$/)
   if (issueMatch) {
     return {
@@ -89,4 +99,8 @@ export function projectPath(ref: string): string {
 
 export function issuePath(projectRef: string, issueRef: string): string {
   return `/projects/${encodeURIComponent(projectRef)}/issues/${encodeURIComponent(issueRef)}`
+}
+
+export function epicPath(projectRef: string, epicRef: string): string {
+  return `/projects/${encodeURIComponent(projectRef)}/epics/${encodeURIComponent(epicRef)}`
 }
