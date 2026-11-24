@@ -26,7 +26,8 @@ the volume; `docker compose down -v` deletes it.
 
 ## Prebuilt binary
 
-Download the server archive from the release page:
+Download the bundle archive from the release page (it contains `tablond` and
+`tablon`):
 
 ```bash
 # Replace os/arch with your platform, for example linux_amd64 or darwin_arm64.

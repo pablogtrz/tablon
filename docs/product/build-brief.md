@@ -239,7 +239,7 @@ Delivered:
 - OpenAPI 3.0.3 contract in `docs/api/openapi.yaml`, embedded and served at `/openapi.yaml`, with route-table and schema contract tests using a test-only kin-openapi dependency.
 - Docker: multi-stage Alpine image, non-root UID/GID 10001, read-only root, cap drop, `/data` named volume, `/health` healthcheck, OCI labels; Compose loopback defaults; `.env.example`; no Node runtime.
 - CI: backend tests/vet/race/migrations/benchmark compile, frontend check/test/build, Playwright Chromium/Firefox/WebKit, embedded binary smoke, Docker smoke, five-target cross-builds and GoReleaser config check.
-- Release: `internal/version` ldflags, `tablond --version`, `tablon version`/`--version`, GoReleaser server and CLI archives, `SHA256SUMS`, grouped notes, multi-arch GHCR image with SBOM/provenance.
+- Release: `internal/version` ldflags, `tablond --version`, `tablon version`/`--version`, GoReleaser bundle (server + CLI) and CLI-only archives, `SHA256SUMS`, grouped notes, multi-arch GHCR image with SBOM/provenance.
 - Benchmarks: store/API benchmarks, query-plan assertions, `scripts/bench.sh`, and recorded results in `docs/performance.md`.
 - Self-hosting and release docs: `docs/self-hosting.md`, `docs/release.md`, README quick starts, AGENTS index, browser install and smoke instructions.
 

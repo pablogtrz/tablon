@@ -76,8 +76,8 @@ docker buildx imagetools inspect ghcr.io/pablogtrz/tablon:0.1.0
 ```
 
 Download and run at least one archive on macOS/Linux and inspect the Windows
-binary. Check that the release contains both `tablon_*` server archives and
-`tablon-cli_*` CLI archives.
+binary. Check that the release contains both `tablon_*` bundle archives (server
+and CLI) and `tablon-cli_*` CLI-only archives.
 
 ## Rollback
 
