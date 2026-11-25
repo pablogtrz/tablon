@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import Pencil from '@lucide/svelte/icons/pencil'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash2 from '@lucide/svelte/icons/trash-2'
@@ -22,8 +22,9 @@
   import { subscribeProjectEvents } from '$lib/events'
   import type { ProjectEvent } from '$lib/events'
   import type { HiddenBoardStatus } from '$lib/board'
-  import { messageOf } from '$lib/errors'
+  import { isAbortError, messageOf } from '$lib/errors'
   import { relativeTime } from '$lib/format'
+  import { setLiveState } from '$lib/live.svelte'
   import { issuePath, epicPath, navigate } from '$lib/router.svelte'
   import type { Epic, Issue, IssueStatus, Project } from '$lib/types'
 
@@ -37,7 +38,9 @@
   let heading = $state<HTMLHeadingElement>()
   let focusPending = true
 
-  let tab = $state<'issues' | 'board' | 'epics'>('issues')
+  const projectTabOrder = ['issues', 'board', 'epics'] as const
+  type ProjectTab = (typeof projectTabOrder)[number]
+  let tab = $state<ProjectTab>('issues')
   let issuesLoading = $state(false)
   let issuesError = $state('')
 
@@ -57,6 +60,18 @@
   let statusFilter = $state('')
   let priorityFilter = $state('')
   let search = $state('')
+
+  let loadAllController: AbortController | null = null
+  let loadAllRequest = 0
+  let issuesController: AbortController | null = null
+  let issuesRequest = 0
+  let issueStateRequest = 0
+  let boardController: AbortController | null = null
+  let boardRequest = 0
+  let epicIssuesController: AbortController | null = null
+  let epicIssuesRequest = 0
+  let epicsController: AbortController | null = null
+  let epicsRequest = 0
 
   let projectSettingsOpen = $state(false)
   let issueOpen = $state(false)
@@ -78,25 +93,45 @@
   })
 
   async function loadAll() {
+    loadAllController?.abort()
+    const controller = new AbortController()
+    loadAllController = controller
+    const request = ++loadAllRequest
+    const issueRequest = ++issueStateRequest
     loading = true
     error = ''
     try {
       const [loadedProject, loadedEpics, issuePage] = await Promise.all([
-        getProject(projectRef),
-        listEpics(projectRef),
-        listIssues(projectRef, { limit: 100, sort: 'created_at', order: 'desc' }),
+        getProject(projectRef, controller.signal),
+        listEpics(projectRef, controller.signal),
+        listIssues(projectRef, {
+          status: statusFilter || undefined,
+          priority: priorityFilter || undefined,
+          q: search.trim() || undefined,
+          limit: 100,
+          sort: 'created_at',
+          order: 'desc',
+          signal: controller.signal,
+        }),
       ])
+      if (request !== loadAllRequest) return
       project = loadedProject
       epics = loadedEpics
-      issues = issuePage.items
+      if (issueRequest === issueStateRequest) issues = issuePage.items
     } catch (err) {
+      if (isAbortError(err) || request !== loadAllRequest) return
       error = messageOf(err)
     } finally {
-      loading = false
+      if (request === loadAllRequest) loading = false
     }
   }
 
   async function loadIssues() {
+    issuesController?.abort()
+    const controller = new AbortController()
+    issuesController = controller
+    const request = ++issuesRequest
+    const issueRequest = ++issueStateRequest
     issuesLoading = true
     issuesError = ''
     try {
@@ -107,40 +142,55 @@
         limit: 100,
         sort: 'created_at',
         order: 'desc',
+        signal: controller.signal,
       })
+      if (request !== issuesRequest || issueRequest !== issueStateRequest) return
       issues = page.items
     } catch (err) {
+      if (isAbortError(err) || request !== issuesRequest || issueRequest !== issueStateRequest) return
       issuesError = messageOf(err)
     } finally {
-      issuesLoading = false
+      if (request === issuesRequest) issuesLoading = false
     }
   }
 
   async function loadBoard() {
+    boardController?.abort()
+    const controller = new AbortController()
+    boardController = controller
+    const request = ++boardRequest
     boardLoading = true
     boardError = ''
     try {
-      const result = await listAllIssues(apiRef)
+      const result = await listAllIssues(apiRef, { signal: controller.signal })
+      if (request !== boardRequest) return
       boardIssues = result.items
       boardTruncated = result.truncated
     } catch (err) {
+      if (isAbortError(err) || request !== boardRequest) return
       boardError = messageOf(err)
     } finally {
-      boardLoading = false
+      if (request === boardRequest) boardLoading = false
     }
   }
 
   async function loadEpicIssues() {
+    epicIssuesController?.abort()
+    const controller = new AbortController()
+    epicIssuesController = controller
+    const request = ++epicIssuesRequest
     epicIssuesLoading = true
     epicIssuesError = ''
     try {
-      const result = await listAllIssues(apiRef)
+      const result = await listAllIssues(apiRef, { signal: controller.signal })
+      if (request !== epicIssuesRequest) return
       epicIssues = result.items
       epicIssuesTruncated = result.truncated
     } catch (err) {
+      if (isAbortError(err) || request !== epicIssuesRequest) return
       epicIssuesError = messageOf(err)
     } finally {
-      epicIssuesLoading = false
+      if (request === epicIssuesRequest) epicIssuesLoading = false
     }
   }
 
@@ -170,7 +220,7 @@
     }
   }
 
-  function selectTab(next: 'issues' | 'board' | 'epics') {
+  function selectTab(next: ProjectTab) {
     tab = next
     if (next === 'board') {
       void loadBoard()
@@ -179,6 +229,20 @@
     } else {
       void loadEpicIssues()
     }
+  }
+
+  function onTabKeydown(event: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const current = projectTabOrder.indexOf(tab)
+    let next = current
+    if (event.key === 'ArrowRight') next = (current + 1) % projectTabOrder.length
+    else if (event.key === 'ArrowLeft') next = (current - 1 + projectTabOrder.length) % projectTabOrder.length
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = projectTabOrder.length - 1
+    const target = projectTabOrder[next]
+    selectTab(target)
+    document.getElementById(`project-tab-${target}`)?.focus()
   }
 
   function showHidden(status: HiddenBoardStatus) {
@@ -244,6 +308,7 @@
   $effect(() => {
     if (!project) return
     const dispose = subscribeProjectEvents(project.identifier, {
+      onstatus: setLiveState,
       onsync: scheduleRefresh,
       onEvent: (event) => {
         void announceEvent(event)
@@ -252,6 +317,7 @@
     })
     return () => {
       dispose()
+      setLiveState('idle')
       if (eventTimer) {
         clearTimeout(eventTimer)
         eventTimer = null
@@ -260,9 +326,16 @@
   })
 
   async function reloadEpics() {
+    epicsController?.abort()
+    const controller = new AbortController()
+    epicsController = controller
+    const request = ++epicsRequest
     try {
-      epics = await listEpics(apiRef)
+      const next = await listEpics(apiRef, controller.signal)
+      if (request !== epicsRequest) return
+      epics = next
     } catch (err) {
+      if (isAbortError(err) || request !== epicsRequest) return
       error = messageOf(err)
     }
   }
@@ -348,6 +421,18 @@
 
   onMount(() => {
     void loadAll()
+  })
+
+  onDestroy(() => {
+    loadAllController?.abort()
+    issuesController?.abort()
+    boardController?.abort()
+    epicIssuesController?.abort()
+    epicsController?.abort()
+    if (eventTimer) {
+      clearTimeout(eventTimer)
+      eventTimer = null
+    }
   })
 </script>
 
@@ -435,7 +520,11 @@
       <button
         type="button"
         role="tab"
+        id="project-tab-issues"
+        aria-controls="project-panel"
+        onkeydown={onTabKeydown}
         aria-selected={tab === 'issues'}
+        tabindex={tab === 'issues' ? 0 : -1}
         class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'issues'
           ? 'bg-[var(--surface-2)] text-foreground'
           : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -448,7 +537,11 @@
       <button
         type="button"
         role="tab"
+        id="project-tab-board"
+        aria-controls="project-panel"
+        onkeydown={onTabKeydown}
         aria-selected={tab === 'board'}
+        tabindex={tab === 'board' ? 0 : -1}
         class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'board'
           ? 'bg-[var(--surface-2)] text-foreground'
           : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -463,7 +556,11 @@
       <button
         type="button"
         role="tab"
+        id="project-tab-epics"
+        aria-controls="project-panel"
+        onkeydown={onTabKeydown}
         aria-selected={tab === 'epics'}
+        tabindex={tab === 'epics' ? 0 : -1}
         class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors {tab === 'epics'
           ? 'bg-[var(--surface-2)] text-foreground'
           : 'text-[var(--text-2)] hover:bg-white/[.03] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -476,71 +573,70 @@
     </div>
 
     {#key tab}
-      <div in:fade={{ duration: motion.reduced ? 0 : 120 }}>
+      <div
+        id="project-panel"
+        role="tabpanel"
+        aria-labelledby={`project-tab-${tab}`}
+        in:fade={{ duration: motion.reduced ? 0 : 120 }}
+      >
         {#if tab === 'issues'}
-          <div role="tabpanel" aria-label="Issues">
-            <IssueList
-              projectRef={apiRef}
-              {issues}
-              {epics}
-              loading={issuesLoading}
-              error={issuesError}
-              bind:status={statusFilter}
-              bind:priority={priorityFilter}
-              bind:search={search}
-              onreload={() => void loadIssues()}
-              onclear={clearFilters}
-            />
-          </div>
+          <IssueList
+            projectRef={apiRef}
+            {issues}
+            {epics}
+            loading={issuesLoading}
+            error={issuesError}
+            bind:status={statusFilter}
+            bind:priority={priorityFilter}
+            bind:search={search}
+            onreload={() => void loadIssues()}
+            onclear={clearFilters}
+          />
         {:else if tab === 'board'}
-          <div role="tabpanel" aria-label="Board">
-            {#if boardError}
-              <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
-                {boardError}
-              </div>
-            {/if}
-            {#if boardLoading && boardIssues.length === 0}
-              <div class="grid gap-3 lg:grid-cols-4" aria-hidden="true">
-                {#each Array(4) as _}
-                  <div class="h-72 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
-                {/each}
-              </div>
-            {:else}
-              <IssueBoard
-                projectRef={apiRef}
-                issues={boardIssues}
-                {epics}
-                movingIds={movingIssueIds}
-                truncated={boardTruncated}
-                onmove={moveBoardIssue}
-                onhidden={showHidden}
-                onopen={openBoardIssue}
-              />
-            {/if}
-          </div>
-        {:else}
-          <div role="tabpanel" aria-label="Epics">
-            {#if epicIssuesError}
-              <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
-                {epicIssuesError}
-              </div>
-            {/if}
-            {#if epicIssuesTruncated}
-              <p class="mb-3 rounded-lg border border-border bg-[var(--surface-1)] px-3 py-2 text-[11px] text-[var(--text-3)]">
-                Showing task counts from the first 1,000 issues.
-              </p>
-            {/if}
-            <EpicList
+          {#if boardError}
+            <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+              {boardError}
+            </div>
+          {/if}
+          {#if boardLoading && boardIssues.length === 0}
+            <div class="grid gap-3 lg:grid-cols-4" aria-hidden="true">
+              {#each Array(4) as _}
+                <div class="h-72 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
+              {/each}
+            </div>
+          {:else}
+            <IssueBoard
               projectRef={apiRef}
+              issues={boardIssues}
               {epics}
-              issues={epicIssues}
-              loading={false}
-              statsLoading={epicIssuesLoading}
-              onopen={openEpic}
-              onedit={openEditEpic}
-              ondelete={openDeleteEpic}
+              movingIds={movingIssueIds}
+              truncated={boardTruncated}
+              onmove={moveBoardIssue}
+              onhidden={showHidden}
+              onopen={openBoardIssue}
             />
-          </div>
+          {/if}
+        {:else}
+          {#if epicIssuesError}
+            <div class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+              {epicIssuesError}
+            </div>
+          {/if}
+          {#if epicIssuesTruncated}
+            <p class="mb-3 rounded-lg border border-border bg-[var(--surface-1)] px-3 py-2 text-[11px] text-[var(--text-3)]">
+              Showing task counts from the first 1,000 issues.
+            </p>
+          {/if}
+          <EpicList
+            projectRef={apiRef}
+            {epics}
+            issues={epicIssues}
+            loading={false}
+            statsLoading={epicIssuesLoading}
+            onopen={openEpic}
+            onedit={openEditEpic}
+            ondelete={openDeleteEpic}
+          />
         {/if}
       </div>
     {/key}

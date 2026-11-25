@@ -54,6 +54,21 @@
   } = $props()
 
   let mode = $state<'write' | 'preview'>('write')
+
+  function onModeKeydown(event: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next: 'write' | 'preview' =
+      event.key === 'Home'
+        ? 'write'
+        : event.key === 'End'
+          ? 'preview'
+          : mode === 'write'
+            ? 'preview'
+            : 'write'
+    mode = next
+    document.getElementById(`editor-tab-${next}`)?.focus()
+  }
   let host = $state<HTMLDivElement>()
   let view: EditorView | null = null
   let syncing = false
@@ -399,7 +414,11 @@
       <button
         type="button"
         role="tab"
+        id="editor-tab-write"
+        aria-controls="editor-panel-write"
+        onkeydown={onModeKeydown}
         aria-selected={mode === 'write'}
+        tabindex={mode === 'write' ? 0 : -1}
         class="rounded-md px-2 py-1 text-[11px] transition-colors {mode === 'write' ? 'bg-[var(--surface-2)] text-foreground' : 'text-[var(--text-3)] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onclick={() => (mode = 'write')}
       >
@@ -408,7 +427,11 @@
       <button
         type="button"
         role="tab"
+        id="editor-tab-preview"
+        aria-controls="editor-panel-preview"
+        onkeydown={onModeKeydown}
         aria-selected={mode === 'preview'}
+        tabindex={mode === 'preview' ? 0 : -1}
         class="rounded-md px-2 py-1 text-[11px] transition-colors {mode === 'preview' ? 'bg-[var(--surface-2)] text-foreground' : 'text-[var(--text-3)] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onclick={() => (mode = 'preview')}
       >
@@ -417,7 +440,13 @@
     </div>
   </div>
 
-  <div role="tabpanel" aria-label="Markdown source" class={mode === 'write' ? 'block' : 'hidden'}>
+  <div
+    id="editor-panel-write"
+    role="tabpanel"
+    aria-label="Markdown source"
+    aria-labelledby="editor-tab-write"
+    class={mode === 'write' ? 'block' : 'hidden'}
+  >
     <div
       bind:this={host}
       data-testid="markdown-editor"
@@ -425,7 +454,13 @@
     ></div>
   </div>
 
-  <div role="tabpanel" aria-label="Markdown preview" class={mode === 'preview' ? 'block' : 'hidden'}>
+  <div
+    id="editor-panel-preview"
+    role="tabpanel"
+    aria-label="Markdown preview"
+    aria-labelledby="editor-tab-preview"
+    class={mode === 'preview' ? 'block' : 'hidden'}
+  >
     <div class="px-3 py-3" style="min-height: var(--editor-min-h)">
       <MarkdownRenderer source={value} interactive ontasktoggle={handleTaskToggle} />
     </div>

@@ -261,14 +261,17 @@ func (c *commandContext) do(method, path string, body any, headers map[string]st
 	return c.client.Do(context.Background(), method, path, body, headers)
 }
 
-func decodePage[T any](raw []byte) ([]T, error) {
-	var page struct {
-		Items []T `json:"items"`
-	}
+type decodedPage[T any] struct {
+	Items      []T    `json:"items"`
+	NextCursor string `json:"next_cursor"`
+}
+
+func decodePage[T any](raw []byte) (decodedPage[T], error) {
+	var page decodedPage[T]
 	if err := json.Unmarshal(raw, &page); err != nil {
-		return nil, err
+		return decodedPage[T]{}, err
 	}
-	return page.Items, nil
+	return page, nil
 }
 
 func idempotencyHeader(key string) (map[string]string, error) {
@@ -420,11 +423,11 @@ func (c *commandContext) project(args []string) error {
 		if err != nil {
 			return err
 		}
-		items, err := decodePage[domain.ProjectListItem](raw)
+		page, err := decodePage[domain.ProjectListItem](raw)
 		if err != nil {
 			return err
 		}
-		return c.output(raw, func() error { return printProjects(c.out, items, c.compact) })
+		return c.output(raw, func() error { return printProjects(c.out, page.Items, c.compact) })
 	case "get":
 		fs := c.flags("project get")
 		positionals, err := parseCommand(fs, args[1:])
@@ -532,11 +535,11 @@ func (c *commandContext) epic(args []string) error {
 		if err != nil {
 			return err
 		}
-		items, err := decodePage[domain.Epic](raw)
+		page, err := decodePage[domain.Epic](raw)
 		if err != nil {
 			return err
 		}
-		return c.output(raw, func() error { return printEpics(c.out, items, c.compact) })
+		return c.output(raw, func() error { return printEpics(c.out, page.Items, c.compact) })
 	case "get":
 		fs := c.flags("epic get")
 		positionals, err := parseCommand(fs, args[1:])
@@ -710,11 +713,11 @@ func (c *commandContext) issueList(args []string) error {
 	if err != nil {
 		return err
 	}
-	items, err := decodePage[domain.Issue](raw)
+	page, err := decodePage[domain.Issue](raw)
 	if err != nil {
 		return err
 	}
-	return c.output(raw, func() error { return printIssues(c.out, items, c.compact) })
+	return c.output(raw, func() error { return printIssues(c.out, page.Items, c.compact, page.NextCursor) })
 }
 
 func (c *commandContext) issueCreate(args []string) error {
@@ -799,7 +802,7 @@ func (c *commandContext) issueUpdate(args []string) error {
 	if set["epic"] {
 		body["epic_id"] = *epic
 	}
-	if set["clear-epic"] {
+	if set["clear-epic"] && *clearEpic {
 		body["epic_id"] = nil
 	}
 	if len(body) == 0 {
@@ -838,11 +841,11 @@ func (c *commandContext) issueComments(args []string) error {
 	if err != nil {
 		return err
 	}
-	items, err := decodePage[domain.Comment](raw)
+	page, err := decodePage[domain.Comment](raw)
 	if err != nil {
 		return err
 	}
-	return c.output(raw, func() error { return printComments(c.out, items, c.compact) })
+	return c.output(raw, func() error { return printComments(c.out, page.Items, c.compact, page.NextCursor) })
 }
 
 func (c *commandContext) issueComment(args []string) error {

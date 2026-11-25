@@ -81,8 +81,13 @@ func (s *Store) ExitIdle() {
 	s.db.SetMaxIdleConns(1)
 }
 
+// timestampFormat is fixed-width so TEXT columns sort chronologically.
+// RFC3339Nano trims trailing zeros, which breaks lexicographic ordering when
+// one fractional value is a prefix of another (for example .1Z vs .12Z).
+const timestampFormat = "2006-01-02T15:04:05.000000000Z07:00"
+
 func formatTime(t time.Time) string {
-	return t.UTC().Format(time.RFC3339Nano)
+	return t.UTC().Format(timestampFormat)
 }
 
 func parseTime(value string) time.Time {

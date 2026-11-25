@@ -13,6 +13,7 @@ import type {
 } from './types'
 
 const TOKEN_KEY = 'tablon.apiToken'
+const REQUEST_TIMEOUT_MS = 15_000
 
 export class ApiError extends Error {
   status: number
@@ -52,32 +53,55 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(path, { ...init, headers })
-  if (response.status === 204) {
-    return undefined as T
+  const controller = new AbortController()
+  const caller = init.signal
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException('Request timed out', 'TimeoutError')),
+    REQUEST_TIMEOUT_MS,
+  )
+  const onAbort = () => controller.abort(caller?.reason)
+  if (caller?.aborted) {
+    controller.abort(caller.reason)
+  } else {
+    caller?.addEventListener('abort', onAbort, { once: true })
   }
 
-  const text = await response.text()
-  let body: unknown = null
-  if (text) {
-    try {
-      body = JSON.parse(text)
-    } catch {
-      body = null
+  try {
+    const response = await fetch(path, { ...init, headers, signal: controller.signal })
+    if (response.status === 204) {
+      return undefined as T
     }
-  }
 
-  if (!response.ok) {
-    const envelope = body as { error?: { code?: string; message?: string; details?: unknown } } | null
-    throw new ApiError(
-      response.status,
-      envelope?.error?.code ?? 'request_failed',
-      envelope?.error?.message ?? response.statusText,
-      envelope?.error?.details,
-    )
-  }
+    const text = await response.text()
+    let body: unknown = null
+    if (text) {
+      try {
+        body = JSON.parse(text)
+      } catch {
+        body = null
+      }
+    }
 
-  return body as T
+    if (!response.ok) {
+      const envelope = body as { error?: { code?: string; message?: string; details?: unknown } } | null
+      throw new ApiError(
+        response.status,
+        envelope?.error?.code ?? 'request_failed',
+        envelope?.error?.message ?? response.statusText,
+        envelope?.error?.details,
+      )
+    }
+
+    return body as T
+  } catch (err) {
+    if (controller.signal.reason instanceof DOMException && controller.signal.reason.name === 'TimeoutError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+    caller?.removeEventListener('abort', onAbort)
+  }
 }
 
 function json(body: unknown): RequestInit {
@@ -165,6 +189,7 @@ export interface IssueListParams {
   order?: 'asc' | 'desc'
   limit?: number
   cursor?: string
+  signal?: AbortSignal
 }
 
 export async function listProjects(includeArchived = false): Promise<ProjectListItem[]> {
@@ -173,8 +198,8 @@ export async function listProjects(includeArchived = false): Promise<ProjectList
   return page.items
 }
 
-export function getProject(ref: string): Promise<Project> {
-  return request<Project>(`/api/v1/projects/${encodeURIComponent(ref)}`)
+export function getProject(ref: string, signal?: AbortSignal): Promise<Project> {
+  return request<Project>(`/api/v1/projects/${encodeURIComponent(ref)}`, { signal })
 }
 
 export function createProject(input: CreateProjectInput): Promise<Project> {
@@ -189,8 +214,11 @@ export function deleteProject(ref: string): Promise<void> {
   return request<void>(`/api/v1/projects/${encodeURIComponent(ref)}`, { method: 'DELETE' })
 }
 
-export async function listEpics(projectRef: string): Promise<Epic[]> {
-  const page = await request<{ items: Epic[] }>(`/api/v1/projects/${encodeURIComponent(projectRef)}/epics`)
+export async function listEpics(projectRef: string, signal?: AbortSignal): Promise<Epic[]> {
+  const page = await request<{ items: Epic[] }>(
+    `/api/v1/projects/${encodeURIComponent(projectRef)}/epics`,
+    { signal },
+  )
   return page.items
 }
 
@@ -221,7 +249,10 @@ export function listIssues(projectRef: string, params: IssueListParams = {}): Pr
   if (params.limit) query.set('limit', String(params.limit))
   if (params.cursor) query.set('cursor', params.cursor)
   const suffix = query.toString() ? `?${query.toString()}` : ''
-  return request<Page<Issue>>(`/api/v1/projects/${encodeURIComponent(projectRef)}/issues${suffix}`)
+  return request<Page<Issue>>(
+    `/api/v1/projects/${encodeURIComponent(projectRef)}/issues${suffix}`,
+    { signal: params.signal },
+  )
 }
 
 export interface AllIssues {
@@ -253,8 +284,8 @@ export async function listAllIssues(
   }
 }
 
-export function getIssue(ref: string): Promise<Issue> {
-  return request<Issue>(`/api/v1/issues/${encodeURIComponent(ref)}`)
+export function getIssue(ref: string, signal?: AbortSignal): Promise<Issue> {
+  return request<Issue>(`/api/v1/issues/${encodeURIComponent(ref)}`, { signal })
 }
 
 export function createIssue(
@@ -285,7 +316,7 @@ export function updateIssueStatus(ref: string, status: IssueStatus): Promise<Iss
 
 export function listComments(
   issueRef: string,
-  params: { limit?: number; cursor?: string } = {},
+  params: { limit?: number; cursor?: string; signal?: AbortSignal } = {},
 ): Promise<Page<Comment>> {
   const query = new URLSearchParams()
   if (params.limit) query.set('limit', String(params.limit))
@@ -293,6 +324,7 @@ export function listComments(
   const suffix = query.toString() ? `?${query.toString()}` : ''
   return request<Page<Comment>>(
     `/api/v1/issues/${encodeURIComponent(issueRef)}/comments${suffix}`,
+    { signal: params.signal },
   )
 }
 
@@ -302,11 +334,15 @@ export interface AllComments {
   nextCursor?: string
 }
 
-export async function listAllComments(issueRef: string, cap = 400): Promise<AllComments> {
+export async function listAllComments(
+  issueRef: string,
+  options: { cap?: number; signal?: AbortSignal } = {},
+): Promise<AllComments> {
+  const cap = options.cap ?? 400
   const items: Comment[] = []
   let cursor: string | undefined
   for (;;) {
-    const page = await listComments(issueRef, { limit: 200, cursor })
+    const page = await listComments(issueRef, { limit: 200, cursor, signal: options.signal })
     items.push(...page.items)
     if (items.length >= cap) {
       return {

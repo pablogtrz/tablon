@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import MessageSquare from '@lucide/svelte/icons/message-square'
   import Button from './Button.svelte'
   import CommentItem from './CommentItem.svelte'
@@ -13,7 +13,7 @@
     listComments,
     updateComment,
   } from '$lib/api'
-  import { messageOf } from '$lib/errors'
+  import { isAbortError, messageOf } from '$lib/errors'
   import { newIdempotencyKey } from '$lib/idempotency'
   import { plural } from '$lib/format'
   import type { Comment } from '$lib/types'
@@ -25,6 +25,8 @@
   let error = $state('')
   let loadMoreCursor = $state<string | undefined>()
   let loadingMore = $state(false)
+  let loadController: AbortController | null = null
+  let loadRequest = 0
 
   let draft = $state('')
   let submitKey = $state('')
@@ -54,16 +56,22 @@
   }
 
   async function load(initial = true) {
+    loadController?.abort()
+    const controller = new AbortController()
+    loadController = controller
+    const request = ++loadRequest
     if (initial) loading = true
     error = ''
     try {
-      const result = await listAllComments(issueRef)
+      const result = await listAllComments(issueRef, { signal: controller.signal })
+      if (request !== loadRequest) return
       comments = result.items
       loadMoreCursor = result.truncated ? result.nextCursor : undefined
     } catch (err) {
+      if (isAbortError(err) || request !== loadRequest) return
       error = messageOf(err)
     } finally {
-      if (initial) loading = false
+      if (request === loadRequest) loading = false
     }
   }
 
@@ -96,7 +104,11 @@
     submitKey ||= newIdempotencyKey()
     try {
       const created = await createComment(issueRef, { content: draft }, submitKey)
-      comments = [...comments, created]
+      loadRequest += 1
+      loading = false
+      comments = comments.some((comment) => comment.id === created.id)
+        ? comments
+        : [...comments, created]
       draft = ''
       submitKey = ''
       await announce('Comment added')
@@ -129,6 +141,7 @@
     editError = ''
     try {
       const updated = await updateComment(comment.id, { content: editDraft })
+      loadRequest += 1
       comments = comments.map((item) => (item.id === updated.id ? updated : item))
       editingId = null
       await announce('Comment updated')
@@ -169,6 +182,7 @@
     deleteError = ''
     try {
       await deleteComment(deleteTarget.id)
+      loadRequest += 1
       comments = comments.filter((comment) => comment.id !== deleteTarget?.id)
       deleteOpen = false
       deleteTarget = null
@@ -201,6 +215,10 @@
 
   onMount(() => {
     void load()
+  })
+
+  onDestroy(() => {
+    loadController?.abort()
   })
 </script>
 

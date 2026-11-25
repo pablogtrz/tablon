@@ -106,9 +106,11 @@ tablon help [group]
 |---|---|
 | default | Human-readable tables and fields |
 | `--compact` | Minimal one-line output for lists |
-| `--json` | Raw API JSON |
+| `--json` | Pretty-printed API JSON, including pagination fields |
 
 `--json` and `--compact` are mutually exclusive. Global flags may appear before or after the command, but not after `--`.
+
+When a list has another page, `issue list` and `issue comments` print the cursor after the rows: `next_cursor: <value>` in `--compact`, or `Next cursor: <value>` in human output. Pass it back with `--cursor`.
 
 ```text
 $ tablon issue list --project TABLON --status todo --compact
@@ -123,7 +125,8 @@ TABLON-17 | todo | high | Kanban board
 | `1` | Runtime, API or network failure |
 | `2` | Usage or configuration error |
 
-Errors go to stderr.
+Errors go to stderr and include the HTTP status and API error code when
+available, for example `409 conflict: resource state conflicts with the request`.
 
 ## Retries
 

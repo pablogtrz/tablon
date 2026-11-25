@@ -1,5 +1,6 @@
 <script lang="ts">
   import Brand from '$lib/components/tablon/Brand.svelte'
+  import LiveIndicator from '$lib/components/tablon/LiveIndicator.svelte'
   import MobileNav from '$lib/components/tablon/MobileNav.svelte'
   import Dashboard from '$lib/views/Dashboard.svelte'
   import EpicView from '$lib/views/EpicView.svelte'
@@ -77,6 +78,9 @@
     </nav>
 
     <div class="border-t border-border px-4 py-4 text-[11px] leading-relaxed text-[var(--text-3)]">
+      <div class="mb-2 empty:hidden">
+        <LiveIndicator />
+      </div>
       Tablon v0.1<br />local-first, agent-ready
     </div>
   </aside>
@@ -113,20 +117,26 @@
         <SettingsIcon size={18} strokeWidth={1.6} aria-hidden="true" />
       </a>
     </nav>
+    <div class="pb-4 empty:hidden">
+      <LiveIndicator compact />
+    </div>
   </aside>
 
   <div class="min-w-0">
     <header class="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-[var(--bg)]/80 px-4 backdrop-blur md:hidden">
       <Brand compact />
-      <button
-        type="button"
-        class="grid size-10 place-items-center rounded-xl text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="Open navigation"
-        aria-expanded={navOpen}
-        onclick={() => (navOpen = true)}
-      >
-        <Menu size={20} strokeWidth={1.6} aria-hidden="true" />
-      </button>
+      <div class="flex items-center gap-1">
+        <LiveIndicator />
+        <button
+          type="button"
+          class="grid size-10 place-items-center rounded-xl text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Open navigation"
+          aria-expanded={navOpen}
+          onclick={() => (navOpen = true)}
+        >
+          <Menu size={20} strokeWidth={1.6} aria-hidden="true" />
+        </button>
+      </div>
     </header>
 
     <main class="mx-auto w-full max-w-[1360px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

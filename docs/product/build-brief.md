@@ -260,3 +260,18 @@ Known limits:
 - Release artifacts were verified with a snapshot only; the first tagged release and GHCR push remain pending review/approval.
 - A server binary without `-tags embed` serves the API but not the SPA.
 - Benchmark figures are from one machine; use `-count` and medians before treating them as gates.
+
+## Review fixes — 2026-11-25
+
+Addressed the P0 and P1 findings from the engineering review:
+
+- Markdown sanitization now keeps only task checkboxes and language classes, so agent-authored content cannot inject form controls or arbitrary utility classes.
+- `issue update --clear-epic=false` no longer clears the epic; the flag combination is covered by tests.
+- `issue list` and `issue comments` print the next cursor in human and compact output; the CLI adapter and docs match.
+- CLI API errors include the HTTP status and error code, for example `409 conflict: ...`.
+- SSE closes on server shutdown through `RegisterOnShutdown`; the client exposes connecting, live, offline and token-required states, and stops retrying on 401/403.
+- Project, issue and comment loads abort stale requests and ignore out-of-order responses; the shell shows one live indicator.
+- Timestamps are stored fixed-width with migration `0003`, so TEXT ordering is chronological; legacy rows are normalized.
+- Project and editor tabs implement the full ARIA tab contract; mobile comment/board actions meet the 40px target; dialogs expose descriptions and the issue detail is a labelled region.
+
+Verified: `go test ./...`, `go vet ./...`, `go test -race ./...`, `go test -tags embed ./...`, `pnpm check`, `pnpm test` (50), `pnpm build`, `pnpm test:e2e` (37 passed, 2 skipped across Chromium, Firefox and WebKit).

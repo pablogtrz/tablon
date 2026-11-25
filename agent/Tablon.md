@@ -26,12 +26,12 @@ Never print, log or commit the token.
 |---|---|
 | default | Human-readable tables and fields. Do not parse. |
 | `--compact` | One line per item. Prefer for routine reads. |
-| `--json` | Raw API JSON. Use when the caller needs fields. |
+| `--json` | Pretty-printed API JSON, including pagination fields. Use when the caller needs exact fields. |
 
 - `--json` and `--compact` are mutually exclusive.
 - Global flags may appear before or after the command, but not after `--`.
-- Errors go to stderr.
-- Exit codes: `0` success, `1` runtime/API/network, `2` usage/config.
+- Errors go to stderr, include the HTTP status and error code when available, and use exit codes `0` success, `1` runtime/API/network, `2` usage/config.
+- Paginated lists print `next_cursor: <value>` in `--compact` and `Next cursor: <value>` in human output when another page exists.
 
 ## References
 
