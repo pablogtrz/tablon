@@ -48,7 +48,7 @@
       <button
         id={`comment-${comment.id}-edit`}
         type="button"
-        class="grid size-8 place-items-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="grid size-10 md:size-8 place-items-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Edit comment from ${comment.agent_id ?? 'local user'}`}
         title="Edit comment"
         onclick={onedit}
@@ -57,7 +57,7 @@
       </button>
       <button
         type="button"
-        class="grid size-8 place-items-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="grid size-10 md:size-8 place-items-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Delete comment from ${comment.agent_id ?? 'local user'}`}
         title="Delete comment"
         onclick={ondelete}

@@ -23,6 +23,7 @@ import (
 
 type testAPI struct {
 	srv *httptest.Server
+	hub *events.Hub
 }
 
 func newTestAPI(t testing.TB, token string) *testAPI {
@@ -53,7 +54,7 @@ func newTestAPIWithIdle(t testing.TB, token string, assets fs.FS, idleCtl *idle.
 	t.Cleanup(hub.Close)
 	srv := httptest.NewServer(api.New(cfg, service.New(st, hub), hub, idleCtl, logger, assets, nil))
 	t.Cleanup(srv.Close)
-	return &testAPI{srv: srv}
+	return &testAPI{srv: srv, hub: hub}
 }
 
 func (a *testAPI) do(t testing.TB, method, path string, body any, headers map[string]string) (int, []byte) {
@@ -544,5 +545,51 @@ func TestProjectEventsStreamsIssueCreated(t *testing.T) {
 	}
 	if event["type"] != "issue.created" || event["project_id"] != projectID {
 		t.Fatalf("event payload = %+v", event)
+	}
+}
+
+func TestProjectEventsStopsWhenHubCloses(t *testing.T) {
+	a := newTestAPI(t, "")
+
+	status, body := a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name": "Closing", "identifier": "CLOSE",
+	}, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("create project status = %d, body = %s", status, body)
+	}
+	projectID := decode[map[string]any](t, body)["id"].(string)
+
+	req, err := http.NewRequest(http.MethodGet, a.srv.URL+"/api/v1/projects/"+projectID+"/events", nil)
+	if err != nil {
+		t.Fatalf("new stream request: %v", err)
+	}
+	resp, err := a.srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	for i := 0; i < 2; i++ {
+		if _, err := reader.ReadString('\n'); err != nil {
+			t.Fatalf("read stream preamble: %v", err)
+		}
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, reader)
+		done <- err
+	}()
+
+	a.hub.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("read after hub close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream did not close after hub.Close")
 	}
 }

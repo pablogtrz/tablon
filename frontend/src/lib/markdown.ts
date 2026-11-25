@@ -57,6 +57,49 @@ const allowedAttributes = [
   'align',
 ]
 
+const tableAlignments = new Set(['left', 'center', 'right'])
+
+// DOMPurify's allowlist is global. Tighten the few attributes that could be
+// abused by agent-authored content: only task checkboxes may be inputs, and
+// classes are limited to the language marker on code blocks. Task list classes
+// are re-added below after this pass.
+function tightenAttributes(fragment: DocumentFragment) {
+  for (const element of fragment.querySelectorAll<HTMLElement>('*')) {
+    const tag = element.tagName.toLowerCase()
+
+    if (tag === 'input' && element.getAttribute('type')?.toLowerCase() !== 'checkbox') {
+      element.remove()
+      continue
+    }
+
+    const classValue = element.getAttribute('class')
+    if (classValue) {
+      const keep =
+        tag === 'code'
+          ? classValue.split(/\s+/).filter((name) => /^language-[\w+#.-]+$/.test(name))
+          : []
+      if (keep.length > 0) {
+        element.setAttribute('class', keep.join(' '))
+      } else {
+        element.removeAttribute('class')
+      }
+    }
+
+    if (tag !== 'input') {
+      element.removeAttribute('type')
+    }
+
+    if (tag === 'th' || tag === 'td') {
+      const align = element.getAttribute('align')?.toLowerCase()
+      if (!align || !tableAlignments.has(align)) {
+        element.removeAttribute('align')
+      }
+    } else {
+      element.removeAttribute('align')
+    }
+  }
+}
+
 export function renderMarkdown(source: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
   if (!source.trim()) return fragment
@@ -76,6 +119,7 @@ export function renderMarkdown(source: string): DocumentFragment {
   }) as DocumentFragment
 
   fragment.append(sanitized)
+  tightenAttributes(fragment)
 
   for (const heading of [...fragment.querySelectorAll('h1')]) {
     const replacement = document.createElement('h2')

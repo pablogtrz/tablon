@@ -96,7 +96,7 @@
       <summary
         bind:this={summary}
         aria-label={`Move ${issue.identifier}`}
-        class="grid size-8 cursor-pointer list-none place-items-center rounded-lg text-[var(--text-3)] outline-none transition-opacity hover:bg-[var(--surface-3)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring group-hover/card:opacity-100 group-focus-within/card:opacity-100 md:opacity-0 [@media(pointer:coarse)]:opacity-100"
+        class="grid size-10 cursor-pointer list-none place-items-center rounded-lg md:size-8 text-[var(--text-3)] outline-none transition-opacity hover:bg-[var(--surface-3)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring group-hover/card:opacity-100 group-focus-within/card:opacity-100 md:opacity-0 [@media(pointer:coarse)]:opacity-100"
       >
         {#if saving}
           <LoaderCircle size={15} strokeWidth={1.6} class="animate-spin motion-reduce:animate-none" aria-hidden="true" />

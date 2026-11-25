@@ -276,8 +276,9 @@ tablon issue release TABLON-17 --agent my-agent
 ```
 
 - Use `--compact` for routine reads and `--json` when parsing. Never parse default human output.
+- Paginated lists print the next cursor (`next_cursor: …` in compact mode) when another page exists.
 - `issue create` and `issue comment` accept `--idempotency-key` for safe retries.
-- Exit codes: `0` success, `1` runtime/API/network, `2` usage/config.
+- Exit codes: `0` success, `1` runtime/API/network, `2` usage/config. API errors include the HTTP status and error code.
 
 The full reference lives in [`cli/README.md`](cli/README.md).
 

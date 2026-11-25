@@ -60,7 +60,7 @@ func (s *Store) Migrate() error {
 		}
 		if _, err := tx.Exec(
 			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
-			version, time.Now().UTC().Format(time.RFC3339Nano),
+			version, formatTime(time.Now().UTC()),
 		); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("record migration %s: %w", name, err)

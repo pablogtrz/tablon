@@ -9,7 +9,7 @@ Tokens and base styles live in `frontend/src/app.css`. This file explains how to
 | Path | Purpose |
 |---|---|
 | `frontend/src/app.css` | Tokens, shadcn bridge, base styles, glass/focus utilities. |
-| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IssueId, IdChip, AgentChip, IssueTable, BoardCard, IssueBoard, EpicStatusBar, EpicList, CommentsSection, CommentItem, CodeBlockDialog. |
+| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IssueId, IdChip, AgentChip, IssueTable, BoardCard, IssueBoard, EpicStatusBar, EpicList, CommentsSection, CommentItem, CodeBlockDialog, LiveIndicator. |
 | `frontend/src/lib/components/ui/` | shadcn-svelte components, added on demand. |
 | `frontend/src/lib/utils.ts` | `cn()` helper. |
 | `frontend/src/lib/types.ts` | Status/priority unions, labels and tones. |
@@ -70,7 +70,7 @@ Do not create a parallel style folder.
 
 - Desktop sidebar 248px; tablet rail 64px; mobile off-canvas drawer. Content max 1360px.
 - Sidebar: brand, search, workspace views, projects, settings. Keep agent/idle detail out of the default sidebar.
-- Top bar: breadcrumb, one live/SSE state, one primary action (`New issue`).
+- Top bar: breadcrumb, one live/SSE state, one primary action (`New issue`). The shell shows one quiet `LiveIndicator` (connecting, live, offline, token required) while a project stream is active.
 - Project header: logo, title, status icon + label, one quiet meta line. Issue lists lead with a split ID (muted project prefix, highlighted number), tinted status cell, priority badge, then title.
 - List: flat rows on the page surface, no glass panel. `Group by` supports None, Epic, Status and Agent; group headers are quiet full-width bands with icon, label and count. Persist the choice in localStorage.
 - Board: four exact columns `Todo`, `In Progress`, `In Review`, `Done`; counts in headers. Backlog can be shown as an optional fifth column via a labelled checkbox persisted in localStorage; Canceled stays reachable from the card move menu. Cards show split ID, title, priority and one owner/category at most. Done previews the first 10 cards with `See all` / `Show less`. No glass on cards or scrolling columns.

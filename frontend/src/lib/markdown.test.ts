@@ -50,6 +50,29 @@ describe('renderMarkdown', () => {
     expect(output).toContain('task-list-item')
     expect(output).toContain('contains-task-list')
   })
+
+  it('drops non-checkbox inputs and arbitrary classes', () => {
+    const output = html(
+      '<input type="password" placeholder="token">\n\n<p class="fixed inset-0 z-50">overlay</p>\n\n- [x] done',
+    )
+    expect(output).not.toContain('type="password"')
+    expect(output).not.toContain('placeholder')
+    expect(output).not.toContain('fixed')
+    expect(output).not.toContain('inset-0')
+    expect(output).not.toContain('z-50')
+    expect(output).toContain('type="checkbox"')
+    expect(output).toContain('task-list-item')
+  })
+
+  it('keeps only the language class on code blocks', () => {
+    const output = html('```ts\nconst x = 1\n```')
+    expect(output).toContain('class="language-ts"')
+  })
+
+  it('keeps safe table alignment and drops invalid alignment', () => {
+    const centered = html('| A |\n| :-: |\n| 1 |')
+    expect(centered).toContain('align="center"')
+  })
 })
 
 describe('toggleTask', () => {

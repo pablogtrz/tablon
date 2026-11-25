@@ -90,10 +90,13 @@ func printEpic(w io.Writer, e domain.Epic, compact bool) error {
 	return nil
 }
 
-func printIssues(w io.Writer, items []domain.Issue, compact bool) error {
+func printIssues(w io.Writer, items []domain.Issue, compact bool, nextCursor string) error {
 	if compact {
 		for _, i := range items {
 			fmt.Fprintf(w, "%s | %s | %s | %s\n", i.Identifier, i.Status, i.Priority, singleLine(i.Title))
+		}
+		if nextCursor != "" {
+			fmt.Fprintf(w, "next_cursor: %s\n", nextCursor)
 		}
 		return nil
 	}
@@ -102,7 +105,13 @@ func printIssues(w io.Writer, items []domain.Issue, compact bool) error {
 	for _, i := range items {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", i.Identifier, i.Status, i.Priority, singleLine(i.Title))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if nextCursor != "" {
+		fmt.Fprintf(w, "Next cursor: %s\n", nextCursor)
+	}
+	return nil
 }
 
 func printIssue(w io.Writer, i domain.Issue, compact bool) error {
@@ -123,7 +132,7 @@ func printIssue(w io.Writer, i domain.Issue, compact bool) error {
 	return nil
 }
 
-func printComments(w io.Writer, items []domain.Comment, compact bool) error {
+func printComments(w io.Writer, items []domain.Comment, compact bool, nextCursor string) error {
 	if compact {
 		for _, c := range items {
 			agent := "-"
@@ -131,6 +140,9 @@ func printComments(w io.Writer, items []domain.Comment, compact bool) error {
 				agent = *c.AgentID
 			}
 			fmt.Fprintf(w, "%s | %s | %s | %s\n", c.ID, c.CreatedAt.Format("2006-01-02T15:04:05Z"), agent, singleLine(c.Content))
+		}
+		if nextCursor != "" {
+			fmt.Fprintf(w, "next_cursor: %s\n", nextCursor)
 		}
 		return nil
 	}
@@ -143,7 +155,13 @@ func printComments(w io.Writer, items []domain.Comment, compact bool) error {
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.ID, c.CreatedAt.Format("2006-01-02T15:04:05Z"), agent, singleLine(c.Content))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if nextCursor != "" {
+		fmt.Fprintf(w, "Next cursor: %s\n", nextCursor)
+	}
+	return nil
 }
 
 func printComment(w io.Writer, c domain.Comment, compact bool) error {

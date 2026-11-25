@@ -22,6 +22,7 @@
   } = $props()
 
   const dialogId = 'dialog-' + Math.random().toString(36).slice(2)
+  const descriptionId = dialogId + '-description'
   let dialog: HTMLDialogElement
 
   $effect(() => {
@@ -42,6 +43,7 @@
   bind:this={dialog}
   closedby="any"
   aria-labelledby={dialogId}
+  aria-describedby={description ? descriptionId : undefined}
   class={cn(
     'tablon-dialog glass-strong m-auto max-h-[85dvh] w-[min(92vw,32rem)] overflow-y-auto overscroll-contain rounded-2xl p-0 text-foreground',
     wide && 'w-[min(92vw,44rem)]',
@@ -58,7 +60,7 @@
     <div>
       <h2 id={dialogId} class="text-base font-semibold tracking-[-.01em]">{title}</h2>
       {#if description}
-        <p class="mt-1 text-xs leading-relaxed text-[var(--text-3)]">{description}</p>
+        <p id={descriptionId} class="mt-1 text-xs leading-relaxed text-[var(--text-3)]">{description}</p>
       {/if}
     </div>
     <button

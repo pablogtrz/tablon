@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import Layers from '@lucide/svelte/icons/layers'
   import Pencil from '@lucide/svelte/icons/pencil'
   import Trash2 from '@lucide/svelte/icons/trash-2'
@@ -15,8 +15,9 @@
   import UnsavedChangesDialog from '$lib/components/tablon/UnsavedChangesDialog.svelte'
   import { deleteIssue, getIssue, getProject, listEpics, releaseIssue, updateIssue } from '$lib/api'
   import type { UpdateIssueInput } from '$lib/api'
-  import { messageOf } from '$lib/errors'
+  import { isAbortError, messageOf } from '$lib/errors'
   import { subscribeProjectEvents } from '$lib/events'
+  import { setLiveState } from '$lib/live.svelte'
   import type { ProjectEvent } from '$lib/events'
   import { formatDate, relativeTime } from '$lib/format'
   import { toggleTask } from '$lib/markdown'
@@ -73,6 +74,11 @@
   let guardResolve: ((value: boolean) => void) | null = null
   let guardPromise: Promise<boolean> | null = null
 
+  let loadController: AbortController | null = null
+  let loadRequest = 0
+  let refreshController: AbortController | null = null
+  let refreshRequest = 0
+
   const epicOptions = $derived([
     { value: '', label: 'No epic', icon: Layers },
     ...epics.map((epic) => ({
@@ -99,23 +105,31 @@
   }
 
   async function load() {
+    refreshController?.abort()
+    refreshRequest += 1
+    loadController?.abort()
+    const controller = new AbortController()
+    loadController = controller
+    const request = ++loadRequest
     loading = true
     error = ''
     try {
       const [loadedIssue, loadedProject, loadedEpics] = await Promise.all([
-        getIssue(issueRef),
-        getProject(projectRef),
-        listEpics(projectRef),
+        getIssue(issueRef, controller.signal),
+        getProject(projectRef, controller.signal),
+        listEpics(projectRef, controller.signal),
       ])
+      if (request !== loadRequest) return
       issue = loadedIssue
       project = loadedProject
       epics = loadedEpics
       titleDraft = loadedIssue.title
       descriptionDraft = loadedIssue.description
     } catch (err) {
+      if (isAbortError(err) || request !== loadRequest) return
       error = messageOf(err)
     } finally {
-      loading = false
+      if (request === loadRequest) loading = false
     }
   }
 
@@ -300,10 +314,15 @@
 
   async function refreshFromServer() {
     if (!issue) return
-    const keepTitle = titleDirty
-    const keepDescription = descriptionDirty
+    refreshController?.abort()
+    const controller = new AbortController()
+    refreshController = controller
+    const request = ++refreshRequest
     try {
-      const updated = await getIssue(issue.identifier)
+      const updated = await getIssue(issue.identifier, controller.signal)
+      if (request !== refreshRequest) return
+      const keepTitle = titleDirty
+      const keepDescription = descriptionDirty
       issue = {
         ...updated,
         title: keepTitle ? issue.title : updated.title,
@@ -311,7 +330,8 @@
       }
       if (!keepTitle) titleDraft = updated.title
       if (!keepDescription && descriptionMode === 'read') descriptionDraft = updated.description
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || request !== refreshRequest) return
       // The stream sync will retry; keep the current view usable.
     }
   }
@@ -324,6 +344,7 @@
   $effect(() => {
     if (!project) return
     const dispose = subscribeProjectEvents(projectRef, {
+      onstatus: setLiveState,
       onsync: () => queueRefresh(true, true),
       onEvent: (event) => {
         if (!eventMatches(event)) return
@@ -351,6 +372,7 @@
     })
     return () => {
       dispose()
+      setLiveState('idle')
       if (eventTimer) {
         clearTimeout(eventTimer)
         eventTimer = null
@@ -394,6 +416,15 @@
       window.removeEventListener('beforeunload', beforeUnload)
     }
   })
+
+  onDestroy(() => {
+    loadController?.abort()
+    refreshController?.abort()
+    if (eventTimer) {
+      clearTimeout(eventTimer)
+      eventTimer = null
+    }
+  })
 </script>
 
 <svelte:head>
@@ -418,7 +449,7 @@
     </div>
   </div>
 {:else}
-  <div bind:this={pageFocus} tabindex="-1" class="space-y-5 outline-none" aria-label="Issue detail">
+  <div bind:this={pageFocus} tabindex="-1" class="space-y-5 outline-none" role="region" aria-label="Issue detail">
     <a
       href={projectPath(projectRef)}
       class="inline-flex items-center gap-1.5 rounded text-xs text-[var(--text-2)] outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"

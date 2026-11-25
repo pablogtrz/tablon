@@ -23,13 +23,18 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	if e.Message != "" {
-		return e.Message
-	}
-	if e.Code != "" {
+	switch {
+	case e.Status != 0 && e.Code != "" && e.Message != "":
+		return fmt.Sprintf("%d %s: %s", e.Status, e.Code, e.Message)
+	case e.Status != 0 && e.Code != "":
+		return fmt.Sprintf("%d %s", e.Status, e.Code)
+	case e.Status != 0:
+		return fmt.Sprintf("request failed with status %d", e.Status)
+	case e.Code != "":
 		return e.Code
+	default:
+		return "request failed"
 	}
-	return fmt.Sprintf("request failed with status %d", e.Status)
 }
 
 type Client struct {

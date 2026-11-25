@@ -23,12 +23,11 @@ type fakeAPI struct {
 func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	f.lastQuery = r.URL.RawQuery
 	f.lastAuth = r.Header.Get("Authorization")
+	f.lastBody = nil
+	f.lastKey = r.Header.Get("Idempotency-Key")
 	body, _ := io.ReadAll(r.Body)
 	if len(body) > 0 {
 		_ = json.Unmarshal(body, &f.lastBody)
-	}
-	if key := r.Header.Get("Idempotency-Key"); key != "" {
-		f.lastKey = key
 	}
 
 	write := func(status int, value any) {
@@ -142,6 +141,14 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 		write(200, issue)
 	case r.URL.Path == "/api/v1/projects/MISSING":
 		write(404, map[string]any{"error": map[string]any{"code": "not_found", "message": "resource not found"}})
+	case r.URL.Path == "/api/v1/projects/UNAUTHORIZED":
+		write(401, map[string]any{"error": map[string]any{"code": "unauthorized", "message": "missing or invalid bearer token"}})
+	case r.URL.Path == "/api/v1/projects/CONFLICT":
+		write(409, map[string]any{"error": map[string]any{"code": "conflict", "message": "resource state conflicts with the request"}})
+	case r.URL.Path == "/api/v1/projects/INVALID":
+		write(422, map[string]any{"error": map[string]any{"code": "validation_error", "message": "status: is not a valid issue status"}})
+	case r.URL.Path == "/api/v1/projects/TOO_LARGE":
+		write(413, map[string]any{"error": map[string]any{"code": "request_too_large", "message": "request body is too large"}})
 	default:
 		write(404, map[string]any{"error": map[string]any{"code": "not_found", "message": "resource not found"}})
 	}
@@ -444,5 +451,133 @@ func TestIssueGetUpdateCommentsAndRelease(t *testing.T) {
 	}
 	if out != "PROJ-1 | bot\n" {
 		t.Fatalf("issue release out = %q", out)
+	}
+}
+
+func TestIssueUpdateClearEpicHonorsFalse(t *testing.T) {
+	f, run := newFake(t)
+
+	code, _, errOut := run([]string{
+		"issue", "update", "PROJ-1", "--epic", "epic-1", "--compact",
+	}, nil, "")
+	if code != 0 {
+		t.Fatalf("set epic code = %d, stderr = %s", code, errOut)
+	}
+	if f.lastBody["epic_id"] != "epic-1" {
+		t.Fatalf("set epic body = %+v", f.lastBody)
+	}
+
+	code, _, errOut = run([]string{
+		"issue", "update", "PROJ-1", "--epic", "epic-2", "--clear-epic=false", "--compact",
+	}, nil, "")
+	if code != 0 {
+		t.Fatalf("epic with false clear code = %d, stderr = %s", code, errOut)
+	}
+	if f.lastBody["epic_id"] != "epic-2" {
+		t.Fatalf("epic was cleared despite --clear-epic=false: %+v", f.lastBody)
+	}
+
+	code, _, errOut = run([]string{
+		"issue", "update", "PROJ-1", "--clear-epic", "--compact",
+	}, nil, "")
+	if code != 0 {
+		t.Fatalf("clear epic code = %d, stderr = %s", code, errOut)
+	}
+	if value, ok := f.lastBody["epic_id"]; !ok || value != nil {
+		t.Fatalf("clear epic body = %+v", f.lastBody)
+	}
+
+	code, _, _ = run([]string{"issue", "update", "PROJ-1", "--clear-epic=false"}, nil, "")
+	if code != 2 {
+		t.Fatalf("false-only code = %d, want usage error 2", code)
+	}
+}
+
+func TestAPIErrorIncludesStatusAndCode(t *testing.T) {
+	_, run := newFake(t)
+
+	cases := []struct {
+		ref  string
+		want string
+	}{
+		{"UNAUTHORIZED", "401 unauthorized: missing or invalid bearer token"},
+		{"CONFLICT", "409 conflict: resource state conflicts with the request"},
+		{"INVALID", "422 validation_error: status: is not a valid issue status"},
+		{"TOO_LARGE", "413 request_too_large: request body is too large"},
+		{"MISSING", "404 not_found: resource not found"},
+	}
+	for _, tc := range cases {
+		code, out, errOut := run([]string{"project", "get", tc.ref}, nil, "")
+		if code != 1 {
+			t.Fatalf("%s code = %d, want 1", tc.ref, code)
+		}
+		if out != "" {
+			t.Fatalf("%s stdout = %q", tc.ref, out)
+		}
+		if !strings.Contains(errOut, tc.want) {
+			t.Fatalf("%s stderr = %q, want %q", tc.ref, errOut, tc.want)
+		}
+	}
+}
+
+func TestListsPrintNextCursor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/comments") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []any{map[string]any{
+					"id": "comment-1", "issue_id": "issue-1", "content": "Started",
+					"agent_id": nil, "created_at": "2026-11-24T10:00:00Z",
+					"updated_at": "2026-11-24T10:00:00Z",
+				}},
+				"next_cursor": "comment-cursor",
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []any{map[string]any{
+				"id": "issue-1", "identifier": "PROJ-1", "project_id": "project-1",
+				"title": "Implement auth", "status": "todo", "priority": "high",
+				"created_at": "2026-11-24T10:00:00Z", "updated_at": "2026-11-24T10:00:00Z",
+			}},
+			"next_cursor": "issue-cursor",
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	run := func(args []string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		code := Run(
+			append([]string{"--url", srv.URL}, args...),
+			func(string) string { return "" },
+			strings.NewReader(""),
+			&out,
+			&errOut,
+		)
+		return code, out.String(), errOut.String()
+	}
+
+	code, out, errOut := run([]string{"issue", "list", "--project", "PROJ", "--compact"})
+	if code != 0 {
+		t.Fatalf("compact code = %d, stderr = %s", code, errOut)
+	}
+	if !strings.Contains(out, "next_cursor: issue-cursor") {
+		t.Fatalf("compact out = %q", out)
+	}
+
+	code, out, errOut = run([]string{"issue", "list", "--project", "PROJ"})
+	if code != 0 {
+		t.Fatalf("human code = %d, stderr = %s", code, errOut)
+	}
+	if !strings.Contains(out, "Next cursor: issue-cursor") {
+		t.Fatalf("human out = %q", out)
+	}
+
+	code, out, errOut = run([]string{"issue", "comments", "PROJ-1", "--compact"})
+	if code != 0 {
+		t.Fatalf("comments code = %d, stderr = %s", code, errOut)
+	}
+	if !strings.Contains(out, "next_cursor: comment-cursor") {
+		t.Fatalf("comments out = %q", out)
 	}
 }

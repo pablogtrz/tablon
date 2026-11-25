@@ -61,6 +61,9 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+	// Shutdown waits for active handlers. Closing the hub ends SSE streams so
+	// they cannot hold the process for the full shutdown timeout.
+	srv.RegisterOnShutdown(hub.Close)
 
 	if !cfg.IsLoopback() && cfg.APIToken == "" {
 		logger.Info("api is bound to a non-loopback address without TABLON_API_TOKEN")

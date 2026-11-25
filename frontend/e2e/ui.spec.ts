@@ -63,6 +63,25 @@ test.describe('list and board preferences', () => {
     await done.getByRole('button', { name: 'Show less' }).click()
     await expect(done.locator('[data-issue-id]')).toHaveCount(10)
   })
+
+  test('moves across project tabs with the keyboard', async ({ page }) => {
+    await page.goto(`/projects/${project.identifier}`)
+
+    const issues = page.getByRole('tab', { name: /Issues/ })
+    const board = page.getByRole('tab', { name: /Board/ })
+    const epics = page.getByRole('tab', { name: /Epics/ })
+
+    await issues.focus()
+    await issues.press('ArrowRight')
+    await expect(board).toBeFocused()
+    await expect(board).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'project-tab-board')
+
+    await board.press('End')
+    await expect(epics).toBeFocused()
+    await expect(epics).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'project-tab-epics')
+  })
 })
 
 test.describe('epic detail', () => {

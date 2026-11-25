@@ -58,9 +58,12 @@ export function reconnectDelay(attempt: number, random = Math.random): number {
   return exponential + Math.floor(random() * 250)
 }
 
+export type ProjectEventStatus = 'connecting' | 'live' | 'offline' | 'unauthorized'
+
 export interface ProjectEventHandlers {
   onEvent: (event: ProjectEvent) => void
   onsync?: () => void
+  onstatus?: (status: ProjectEventStatus) => void
 }
 
 export function subscribeProjectEvents(
@@ -77,6 +80,7 @@ export function subscribeProjectEvents(
     if (stopped || hidden || controller) return
     const ac = new AbortController()
     controller = ac
+    handlers.onstatus?.('connecting')
     const headers = new Headers({ Accept: 'text/event-stream' })
     const token = getToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
@@ -86,11 +90,17 @@ export function subscribeProjectEvents(
         `/api/v1/projects/${encodeURIComponent(projectRef)}/events`,
         { headers, signal: ac.signal, cache: 'no-store' },
       )
+      if (response.status === 401 || response.status === 403) {
+        stopped = true
+        handlers.onstatus?.('unauthorized')
+        return
+      }
       if (!response.ok || !response.body) {
         throw new Error(`event stream failed with ${response.status}`)
       }
 
       attempt = 0
+      handlers.onstatus?.('live')
       handlers.onsync?.()
 
       const reader = response.body.getReader()
@@ -116,6 +126,7 @@ export function subscribeProjectEvents(
       throw new Error('event stream ended')
     } catch {
       if (stopped || ac.signal.aborted) return
+      handlers.onstatus?.('offline')
       timer = setTimeout(() => {
         timer = null
         void connect()
