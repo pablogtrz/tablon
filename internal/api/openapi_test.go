@@ -123,15 +123,18 @@ func TestOpenAPIContract(t *testing.T) {
 
 	now := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
 	project := domain.Project{
-		ID:           "01a20a51-31ec-73eb-b322-d0f6f3640534",
-		Identifier:   "TABLON",
-		Name:         "Tablon",
-		Description:  "Lightweight issue tracking.",
-		Status:       domain.ProjectActive,
-		LogoGradient: 5,
-		LogoEmoji:    "🧭",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                "01a20a51-31ec-73eb-b322-d0f6f3640534",
+		Identifier:        "TABLON",
+		Name:              "Tablon",
+		Description:       "Lightweight issue tracking.",
+		Status:            domain.ProjectActive,
+		LogoGradient:      5,
+		LogoEmoji:         "🧭",
+		LogoGradientFrom:  "#ffa443",
+		LogoGradientTo:    "#8b5cf6",
+		LogoGradientAngle: 135,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	issue := domain.Issue{
 		ID:          "01a20a51-320b-7a6b-8197-e47fca889efb",

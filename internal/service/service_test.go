@@ -68,6 +68,79 @@ func TestCreateProjectDefaultsAndIdentifierCollision(t *testing.T) {
 	}
 }
 
+func TestProjectCustomGradientValidationAndRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	angle := 45
+
+	p, err := svc.CreateProject(ctx, CreateProjectInput{
+		Name:              "Custom gradient",
+		LogoGradientFrom:  "#FFA443",
+		LogoGradientTo:    "#8B5CF6",
+		LogoGradientAngle: &angle,
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if p.LogoGradientFrom != "#ffa443" || p.LogoGradientTo != "#8b5cf6" || p.LogoGradientAngle != 45 {
+		t.Fatalf("custom gradient = %#v", p)
+	}
+
+	got, err := svc.GetProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if got.LogoGradientFrom != "#ffa443" || got.LogoGradientTo != "#8b5cf6" || got.LogoGradientAngle != 45 {
+		t.Fatalf("stored custom gradient = %#v", got)
+	}
+
+	empty := ""
+	cleared, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{
+		LogoGradientFrom: &empty,
+		LogoGradientTo:   &empty,
+	})
+	if err != nil {
+		t.Fatalf("clear custom gradient: %v", err)
+	}
+	if cleared.LogoGradientFrom != "" || cleared.LogoGradientTo != "" {
+		t.Fatalf("custom gradient was not cleared: %#v", cleared)
+	}
+
+	from := "#112233"
+	to := "#445566"
+	nextAngle := 225
+	updated, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{
+		LogoGradientFrom:  &from,
+		LogoGradientTo:    &to,
+		LogoGradientAngle: &nextAngle,
+	})
+	if err != nil {
+		t.Fatalf("update custom gradient: %v", err)
+	}
+	if updated.LogoGradientFrom != from || updated.LogoGradientTo != to || updated.LogoGradientAngle != nextAngle {
+		t.Fatalf("updated custom gradient = %#v", updated)
+	}
+
+	if _, err := svc.CreateProject(ctx, CreateProjectInput{
+		Name:             "Bad colour",
+		LogoGradientFrom: "#fff",
+		LogoGradientTo:   "#000000",
+	}); err == nil {
+		t.Fatal("expected invalid colour error")
+	} else if _, ok := domain.AsValidation(err); !ok {
+		t.Fatalf("error = %v, want validation error", err)
+	}
+
+	if _, err := svc.CreateProject(ctx, CreateProjectInput{
+		Name:             "One-sided gradient",
+		LogoGradientFrom: "#aabbcc",
+	}); err == nil {
+		t.Fatal("expected one-sided gradient error")
+	} else if _, ok := domain.AsValidation(err); !ok {
+		t.Fatalf("error = %v, want validation error", err)
+	}
+}
+
 func TestExplicitIdentifierConflict(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

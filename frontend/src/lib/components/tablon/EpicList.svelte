@@ -1,9 +1,6 @@
 <script lang="ts">
-  import Pencil from '@lucide/svelte/icons/pencil'
-  import Trash2 from '@lucide/svelte/icons/trash-2'
-  import Button from './Button.svelte'
   import EpicStatusBadge from './EpicStatusBadge.svelte'
-  import EpicStatusBar from './EpicStatusBar.svelte'
+  import IssueStatusCounts from './IssueStatusCounts.svelte'
   import { plural, relativeTime } from '$lib/format'
   import { epicPath } from '$lib/router.svelte'
   import { ISSUE_STATUSES } from '$lib/types'
@@ -17,8 +14,6 @@
     loading,
     statsLoading = false,
     onopen,
-    onedit,
-    ondelete,
   }: {
     projectRef: string
     epics: Epic[]
@@ -26,8 +21,6 @@
     loading: boolean
     statsLoading?: boolean
     onopen: (epic: Epic) => void
-    onedit: (epic: Epic) => void
-    ondelete: (epic: Epic) => void
   } = $props()
 
   const countsByEpic = $derived.by(() => {
@@ -80,7 +73,7 @@
 {#if loading}
   <div class="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2" aria-hidden="true">
     {#each Array(2) as _}
-      <div class="h-52 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
+      <div class="h-60 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
     {/each}
   </div>
 {:else if epics.length === 0}
@@ -101,16 +94,16 @@
       {@const href = epicPath(projectRef, epic.id)}
       <article
         class={cn(
-          'group relative flex flex-col rounded-2xl border p-4 transition-colors',
+          'relative flex flex-col rounded-2xl border p-5 transition-colors',
           'has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring has-[a:focus-visible]:ring-offset-2 has-[a:focus-visible]:ring-offset-background',
           isDone
             ? 'border-[var(--epic-done-border)] bg-[var(--epic-done-bg)] hover:border-[var(--status-done)]'
             : 'border-border bg-[var(--surface-1)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]',
         )}
       >
-        <header class="flex items-start justify-between gap-3">
+        <header class="flex items-start justify-between gap-4">
           <div class="min-w-0">
-            <h3 class={cn('truncate text-sm font-semibold tracking-[-.01em]', isDone ? 'text-[var(--text-2)]' : 'text-foreground')}>
+            <h3 class={cn('truncate text-sm font-semibold tracking-[-.01em]', isDone ? 'text-[var(--text-3)]' : 'text-foreground')}>
               <a
                 {href}
                 class="card-link cursor-pointer rounded outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:outline-none"
@@ -119,47 +112,47 @@
                 {epic.title}
               </a>
             </h3>
-            <p class="mt-0.5 text-[11px] text-[var(--text-3)]">
+            <p class="mt-1 text-[11px] text-[var(--text-3)]">
               Updated {relativeTime(epic.updated_at)} · {plural(total, 'task')}
             </p>
           </div>
           <EpicStatusBadge status={epic.status} />
         </header>
 
-        <p class={cn('mt-3 line-clamp-2 min-h-10 text-xs leading-relaxed', isDone ? 'text-[var(--text-3)]' : 'text-[var(--text-2)]')}>
+        <p class={cn('mt-4 line-clamp-2 min-h-10 text-xs leading-relaxed', isDone ? 'text-[var(--text-3)]' : 'text-[var(--text-2)]')}>
           {excerpt(epic.description) || 'No description yet.'}
         </p>
 
-        <div class="mt-auto pt-4">
+        <div class="mt-auto pt-6">
           {#if statsLoading}
-            <div class="h-2 animate-pulse rounded-full bg-white/[.06] motion-reduce:animate-none" aria-hidden="true"></div>
-            <p class="mt-2 text-[10.5px] text-[var(--text-3)]">Counting tasks…</p>
+            <div class="flex items-center justify-between gap-3" aria-hidden="true">
+              <div class="h-4 w-20 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none"></div>
+              <div class="h-3 w-8 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+            </div>
+            <div class="mt-2.5 h-2 animate-pulse rounded-full bg-white/[.06] motion-reduce:animate-none" aria-hidden="true"></div>
+            <div class="mt-4 flex gap-5" aria-hidden="true">
+              <div class="h-7 w-16 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+              <div class="h-7 w-12 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+            </div>
+            <p class="sr-only">Counting tasks…</p>
           {:else}
-            <div class="flex items-center justify-between gap-3 text-[11px] text-[var(--text-3)]">
-              <span class="tnum">{done}/{total} done</span>
-              <span class="tnum">{progress}%</span>
+            <div class="flex items-baseline justify-between gap-3">
+              <p class={cn('text-xs', isDone ? 'text-[var(--text-3)]' : 'text-[var(--text-2)]')}>
+                <span class={cn('tnum text-sm font-semibold', isDone ? 'text-[var(--text-2)]' : 'text-foreground')}>{done}/{total}</span>
+                <span class="ml-0.5">done</span>
+              </p>
+              <span class="tnum text-[11px] text-[var(--text-3)]">{progress}%</span>
             </div>
             <progress
-              class="epic-progress mt-2"
+              class="tablon-progress mt-3"
               value={done}
               max={Math.max(total, 1)}
               style="--progress-fill: {isDone ? 'var(--status-done)' : 'var(--brand)'}"
               aria-label={`${done} of ${total} tasks done in ${epic.title}`}
             ></progress>
-            <EpicStatusBar {counts} class="mt-4" />
+            <IssueStatusCounts {counts} muted={isDone} class="mt-4" />
           {/if}
         </div>
-
-        <footer class="relative z-10 mt-3 flex justify-end gap-1.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-          <Button variant="ghost" class="h-8 px-2 text-xs" onclick={() => onedit(epic)}>
-            <Pencil size={13} strokeWidth={1.6} aria-hidden="true" />
-            Edit
-          </Button>
-          <Button variant="ghost" class="h-8 px-2 text-xs text-destructive hover:text-destructive" onclick={() => ondelete(epic)}>
-            <Trash2 size={13} strokeWidth={1.6} aria-hidden="true" />
-            Delete
-          </Button>
-        </footer>
       </article>
     {/each}
   </div>

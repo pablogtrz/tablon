@@ -435,7 +435,13 @@
   <div class="space-y-5" aria-hidden="true">
     <div class="h-4 w-32 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none"></div>
     <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div class="h-96 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
+      <div class="space-y-3">
+        <div class="h-9 w-3/4 animate-pulse rounded bg-white/[.06] motion-reduce:animate-none"></div>
+        <div class="h-3 w-1/4 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+        <div class="h-3 w-full animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+        <div class="h-3 w-5/6 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+        <div class="h-3 w-2/3 animate-pulse rounded bg-white/[.04] motion-reduce:animate-none"></div>
+      </div>
       <div class="h-72 animate-pulse rounded-2xl border border-border bg-[var(--surface-1)] motion-reduce:animate-none"></div>
     </div>
   </div>
@@ -472,14 +478,14 @@
     </div>
 
     <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-      <section class="glass rounded-2xl p-4 sm:p-5">
+      <section class="min-w-0">
         <div class="group relative">
           <label class="sr-only" for="issue-title">Issue title</label>
           <input
             id="issue-title"
             class={cn(
               inputClass,
-              'h-11 border-transparent bg-transparent px-1 pr-8 text-lg font-semibold tracking-[-.01em] focus:bg-[var(--surface-1)]',
+              'h-11 border-transparent bg-transparent px-0 pr-8 text-lg font-semibold tracking-[-.01em] focus:bg-[var(--surface-1)]',
             )}
             bind:value={titleDraft}
             readonly={titleSaving}

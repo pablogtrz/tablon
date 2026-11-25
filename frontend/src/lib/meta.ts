@@ -205,6 +205,18 @@ export const EPIC_STATUS_OPTIONS: SelectOption<EpicStatus>[] = (
   icon: EPIC_STATUS_META[value].icon,
 }))
 
+/** Curated project logo gradients, in the order defined by app.css. */
+export const LOGO_GRADIENT_OPTIONS = [
+  { value: 0, label: 'Amber' },
+  { value: 1, label: 'Blue' },
+  { value: 2, label: 'Violet' },
+  { value: 3, label: 'Green' },
+  { value: 4, label: 'Cyan' },
+  { value: 5, label: 'Yellow' },
+  { value: 6, label: 'Slate' },
+  { value: 7, label: 'Indigo' },
+] as const
+
 export const ANY_STATUS_OPTION: SelectOption = {
   value: '',
   label: 'Any status',

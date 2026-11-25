@@ -1,12 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
+  import Pencil from '@lucide/svelte/icons/pencil'
+  import Trash2 from '@lucide/svelte/icons/trash-2'
   import Button from '$lib/components/tablon/Button.svelte'
+  import ConfirmModal from '$lib/components/tablon/ConfirmModal.svelte'
+  import EpicFormModal from '$lib/components/tablon/EpicFormModal.svelte'
   import EpicStatusBadge from '$lib/components/tablon/EpicStatusBadge.svelte'
-  import EpicStatusBar from '$lib/components/tablon/EpicStatusBar.svelte'
+  import IssueStatusCounts from '$lib/components/tablon/IssueStatusCounts.svelte'
   import IssueTable from '$lib/components/tablon/IssueTable.svelte'
   import MarkdownRenderer from '$lib/components/tablon/MarkdownRenderer.svelte'
-  import { getEpic, getProject, listAllIssues } from '$lib/api'
+  import { deleteEpic, getEpic, getProject, listAllIssues } from '$lib/api'
   import { messageOf } from '$lib/errors'
   import { plural, relativeTime } from '$lib/format'
   import { navigate, projectPath } from '$lib/router.svelte'
@@ -23,6 +27,11 @@
   let truncated = $state(false)
   let heading = $state<HTMLHeadingElement>()
   let focusPending = true
+
+  let editOpen = $state(false)
+  let deleteOpen = $state(false)
+  let deleting = $state(false)
+  let deleteError = $state('')
 
   const counts = $derived.by(() => {
     const result = Object.fromEntries(ISSUE_STATUSES.map((status) => [status, 0])) as Record<IssueStatus, number>
@@ -61,6 +70,31 @@
 
   function backToProject() {
     void navigate(projectPath(projectRef))
+  }
+
+  function onEpicSaved(saved: Epic) {
+    epic = saved
+  }
+
+  function openDelete() {
+    deleteError = ''
+    deleteOpen = true
+  }
+
+  async function submitDelete() {
+    const target = epic
+    if (!target || deleting) return
+    deleting = true
+    deleteError = ''
+    try {
+      await deleteEpic(target.id)
+      deleteOpen = false
+      backToProject()
+    } catch (err) {
+      deleteError = messageOf(err)
+    } finally {
+      deleting = false
+    }
   }
 
   onMount(() => {
@@ -111,22 +145,39 @@
             Updated {relativeTime(epic.updated_at)} · {plural(total, 'task')}
           </p>
         </div>
-        <EpicStatusBadge status={epic.status} />
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <EpicStatusBadge status={epic.status} />
+          <Button variant="secondary" class="h-8 px-2 text-xs" onclick={() => (editOpen = true)}>
+            <Pencil size={13} strokeWidth={1.6} aria-hidden="true" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            class="h-8 px-2 text-xs text-destructive hover:text-destructive"
+            onclick={openDelete}
+          >
+            <Trash2 size={13} strokeWidth={1.6} aria-hidden="true" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       <div class="mt-4">
-        <div class="flex items-center justify-between gap-3 text-[11px] text-[var(--text-3)]">
-          <span>Progress</span>
-          <span class="tnum">{done}/{total} done · {progress}%</span>
+        <div class="flex items-baseline justify-between gap-3">
+          <p class="text-xs text-[var(--text-2)]">
+            <span class="tnum text-sm font-semibold text-foreground">{done}/{total}</span>
+            <span class="ml-0.5">done</span>
+          </p>
+          <span class="tnum text-[11px] text-[var(--text-3)]">{progress}%</span>
         </div>
         <progress
-          class="epic-progress mt-2"
+          class="tablon-progress mt-2.5"
           value={done}
           max={Math.max(total, 1)}
           style="--progress-fill: {epic.status === 'done' ? 'var(--status-done)' : 'var(--brand)'}"
           aria-label={`${done} of ${total} tasks done in ${epic.title}`}
         ></progress>
-        <EpicStatusBar {counts} label="Tasks by status" class="mt-4" />
+        <IssueStatusCounts {counts} label="Tasks by status" class="mt-4" />
       </div>
 
       <div class="mt-5 border-t border-border pt-4">
@@ -166,4 +217,17 @@
       />
     {/if}
   </div>
+{/if}
+
+{#if epic}
+  <EpicFormModal bind:open={editOpen} {projectRef} {epic} onsaved={onEpicSaved} />
+  <ConfirmModal
+    bind:open={deleteOpen}
+    title="Delete epic"
+    description={`Delete “${epic.title}”? Its issues will become unassigned.`}
+    confirmLabel="Delete epic"
+    busy={deleting}
+    error={deleteError}
+    onconfirm={() => void submitDelete()}
+  />
 {/if}

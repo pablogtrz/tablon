@@ -59,21 +59,27 @@ func (s *Server) systemStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 type createProjectRequest struct {
-	Name         string `json:"name"`
-	Identifier   string `json:"identifier"`
-	Description  string `json:"description"`
-	Status       string `json:"status"`
-	LogoGradient *int   `json:"logo_gradient"`
-	LogoEmoji    string `json:"logo_emoji"`
+	Name              string `json:"name"`
+	Identifier        string `json:"identifier"`
+	Description       string `json:"description"`
+	Status            string `json:"status"`
+	LogoGradient      *int   `json:"logo_gradient"`
+	LogoEmoji         string `json:"logo_emoji"`
+	LogoGradientFrom  string `json:"logo_gradient_from"`
+	LogoGradientTo    string `json:"logo_gradient_to"`
+	LogoGradientAngle *int   `json:"logo_gradient_angle"`
 }
 
 type updateProjectRequest struct {
-	Name         *string `json:"name"`
-	Identifier   *string `json:"identifier"`
-	Description  *string `json:"description"`
-	Status       *string `json:"status"`
-	LogoGradient *int    `json:"logo_gradient"`
-	LogoEmoji    *string `json:"logo_emoji"`
+	Name              *string `json:"name"`
+	Identifier        *string `json:"identifier"`
+	Description       *string `json:"description"`
+	Status            *string `json:"status"`
+	LogoGradient      *int    `json:"logo_gradient"`
+	LogoEmoji         *string `json:"logo_emoji"`
+	LogoGradientFrom  *string `json:"logo_gradient_from"`
+	LogoGradientTo    *string `json:"logo_gradient_to"`
+	LogoGradientAngle *int    `json:"logo_gradient_angle"`
 }
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
@@ -97,12 +103,15 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.svc.CreateProject(r.Context(), service.CreateProjectInput{
-		Name:         req.Name,
-		Identifier:   req.Identifier,
-		Description:  req.Description,
-		Status:       req.Status,
-		LogoGradient: req.LogoGradient,
-		LogoEmoji:    req.LogoEmoji,
+		Name:              req.Name,
+		Identifier:        req.Identifier,
+		Description:       req.Description,
+		Status:            req.Status,
+		LogoGradient:      req.LogoGradient,
+		LogoEmoji:         req.LogoEmoji,
+		LogoGradientFrom:  req.LogoGradientFrom,
+		LogoGradientTo:    req.LogoGradientTo,
+		LogoGradientAngle: req.LogoGradientAngle,
 	})
 	if err != nil {
 		handleError(w, s.logger, err)
@@ -127,12 +136,15 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.svc.UpdateProject(r.Context(), r.PathValue("projectRef"), service.UpdateProjectInput{
-		Name:         req.Name,
-		Identifier:   req.Identifier,
-		Description:  req.Description,
-		Status:       req.Status,
-		LogoGradient: req.LogoGradient,
-		LogoEmoji:    req.LogoEmoji,
+		Name:              req.Name,
+		Identifier:        req.Identifier,
+		Description:       req.Description,
+		Status:            req.Status,
+		LogoGradient:      req.LogoGradient,
+		LogoEmoji:         req.LogoEmoji,
+		LogoGradientFrom:  req.LogoGradientFrom,
+		LogoGradientTo:    req.LogoGradientTo,
+		LogoGradientAngle: req.LogoGradientAngle,
 	})
 	if err != nil {
 		handleError(w, s.logger, err)

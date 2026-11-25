@@ -9,13 +9,14 @@ Tokens and base styles live in `frontend/src/app.css`. This file explains how to
 | Path | Purpose |
 |---|---|
 | `frontend/src/app.css` | Tokens, shadcn bridge, base styles, glass/focus utilities. |
-| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IssueId, IdChip, AgentChip, IssueTable, BoardCard, IssueBoard, EpicStatusBar, EpicList, CommentsSection, CommentItem, CodeBlockDialog, LiveIndicator. |
+| `frontend/src/lib/components/tablon/` | StatusCell, PriorityBadge, Select, MarkdownRenderer, MarkdownEditor, IssueId, IdChip, AgentChip, IssueTable, BoardCard, IssueBoard, IssueStatusCounts, EpicList, LogoPicker, GradientMaker, EmojiPicker, ProjectNav, CommentsSection, CommentItem, CodeBlockDialog, LiveIndicator. |
 | `frontend/src/lib/components/ui/` | shadcn-svelte components, added on demand. |
 | `frontend/src/lib/utils.ts` | `cn()` helper. |
 | `frontend/src/lib/types.ts` | Status/priority unions, labels and tones. |
 | `frontend/src/lib/meta.ts` | Status/priority icons, tones and select options. |
 | `frontend/src/lib/issue-grouping.ts` | List grouping by none, epic, status or agent. |
 | `frontend/src/lib/preferences.ts` | Typed, best-effort localStorage preferences. |
+| `frontend/src/lib/emoji.ts` | Emoji categories and labels for `EmojiPicker`. |
 | `frontend/src/lib/confetti.ts` | One-shot canvas completion burst; reduced motion is a no-op. |
 | `frontend/src/lib/markdown.ts` | Markdown render, sanitization, code block affordances and task toggling. |
 | `frontend/src/lib/editor-theme.ts` | CodeMirror theme and custom Markdown decorations. |
@@ -64,26 +65,29 @@ Do not create a parallel style folder.
 - Glass: white 6.5% → 2.2%, 1px border, `blur(20px) saturate(140%)`, inset top highlight.
 - Blur only on large surfaces. Cap at two blurred layers per screen; never blur scrolling lists.
 - Ambient: near-black base + amber glow top-right + cool slate glow left + grain. Fixed decoration.
-- Project logo: curated gradient tile by default; emoji overrides it. The eight pairs live in `app.css` in this order: amber, blue, violet, green, cyan, yellow, slate, indigo. Do not invent per-project pairs.
+- Project logo: curated gradient tile by default, or a custom two-stop gradient from `GradientMaker`; an emoji sits on top. The eight curated pairs live in `app.css` in this order: amber, blue, violet, green, cyan, yellow, slate, indigo. Use `LogoPicker` for both curated and custom; custom colours are project data, not theme tokens.
 
 ## Layout
 
 - Desktop sidebar 248px; tablet rail 64px; mobile off-canvas drawer. Content max 1360px.
-- Sidebar: brand, search, workspace views, projects, settings. Keep agent/idle detail out of the default sidebar.
+- Sidebar: brand, workspace views, a Projects disclosure listing each project with its logo/emoji, then Settings. The disclosure is open by default on Projects routes and collapses on Settings; the Projects link and the chevron are separate controls. Keep agent/idle detail out of the default sidebar.
 - Top bar: breadcrumb, one live/SSE state, one primary action (`New issue`). The shell shows one quiet `LiveIndicator` (connecting, live, offline, token required) while a project stream is active.
 - Project header: logo, title, status icon + label, one quiet meta line. Issue lists lead with a split ID (muted project prefix, highlighted number), tinted status cell, priority badge, then title.
 - List: flat rows on the page surface, no glass panel. `Group by` supports None, Epic, Status and Agent; group headers are quiet full-width bands with icon, label and count. Persist the choice in localStorage.
 - Board: four exact columns `Todo`, `In Progress`, `In Review`, `Done`; counts in headers. Backlog can be shown as an optional fifth column via a labelled checkbox persisted in localStorage; Canceled stays reachable from the card move menu. Cards show split ID, title, priority and one owner/category at most. Done previews the first 10 cards with `See all` / `Show less`. No glass on cards or scrolling columns.
-- Epics: 1-column mobile, 2-column desktop. Card shows title, updated time, large tinted status, plain 2-line description excerpt, done/total progress with native `<progress>`, and a stacked status-count bar with a text legend. Done epics use a muted greenish surface. The card has a stretched title link plus Edit/Delete actions; it opens an epic detail view with the full Markdown description and task table.
-- Mobile: board snaps horizontally and exposes the move menu; tables stack; drawer nav.
+- Epics: 1-column mobile, 2-column desktop. Card shows title, updated time, large tinted status, plain 2-line description excerpt, a prominent done/total and percentage, an 8px native `<progress>` rail, and number-first task counts per status (one labelled number stack per status, no split bar). Done epics recede with a desaturated green-tinted surface and muted text while the green status badge and fill stay as the done cue. The card has a single stretched title link and no actions; Edit/Delete live in the epic detail view, which also renders the full Markdown description and task table.
+- Mobile: board snaps horizontally and exposes the move menu; tables stack; drawer nav. The emoji picker is a bottom sheet below 640px and an anchored popover above it.
 
 ## Components
 
 - Buttons: primary amber fill + dark ink; secondary flat + border; ghost text; danger red tint. One primary action per view. Loading keeps its label. Icon + label for primary actions; icon-only secondary actions need `aria-label`.
 - Inputs: 36px, 10px radius, `surface-1`, visible labels, amber focus ring.
 - Status/priority: use `StatusCell`, `PriorityBadge`, `ProjectStatusBadge`, `EpicStatusBadge`. Use `Select` for status/priority controls. Do not recreate their CSS inline. Priority badges are 26px with a soft tone background, tone icon and tone text; keep the label.
-- Cards: glass only for large items. Project card: logo, name, ID, status icon + label, progress bar, counts, updated time. Epic card: as described under Layout, with a single stretched title link and independent actions above it.
-- Progress: use native `<progress class="epic-progress">` with an accessible label. Amber fill is the default; Done epic fills use `--status-done`.
+- Cards: glass only for large items; project and epic cards use 20px padding with 16–24px between header, description and progress groups. Project card: logo, name, ID, status icon + label, an 8px progress rail, a prominent done/total and epic count, updated time. Epic card: as described under Layout, with a single stretched title link and no edit/delete controls.
+- Progress: use native `<progress class="tablon-progress">` with an accessible label. The rail is `--progress-h` (8px); amber fill is the default, Done epic/project fills use `--status-done`, and value changes animate except under reduced motion.
+- Status counts: use `IssueStatusCounts` for epic cards and epic detail. It renders one label-above-number stack per present status with a tone dot; do not recreate a split status bar.
+- Project identity: use `LogoPicker` for the eight approved gradient pairs or a custom gradient, and `EmojiPicker` for the optional emoji. `LogoPicker` keeps the custom maker behind a ninth Custom option and uses native radios. `EmojiPicker` is a searchable, categorised grid with recents, a custom emoji input and `aria-pressed` selection; it opens as a bottom sheet below 640px. Selection is never conveyed by colour alone.
+- Issue detail: the main title/description column sits directly on the page canvas with no glass shell; only the properties and comment items use quiet surface panels.
 - Markdown: `MarkdownRenderer` for read mode and preview; `MarkdownEditor` for editing. Task checkboxes toggle the source; https images, tables and task lists are allowed; malformed HTML is sanitized.
 - Editor: CodeMirror 6 core with custom Markdown decorations. No textarea editing surface. Headings, emphasis, inline code, links, lists and fenced blocks are styled in source while the Markdown markers stay visible. Keep the editor in the lazy IssueView chunk.
 - Code blocks: insert through `CodeBlockDialog` with an optional language. Rendered blocks get a language header and Copy action. No language-specific syntax highlighting in v0.1.
@@ -123,14 +127,19 @@ Do not create a parallel style folder.
 
 ## Review checklist
 
-- [ ] Accent is `#FFA443`; no ad-hoc UI colors, gradients or shadows (project logo gradients use the approved palette).
+- [ ] Accent is `#FFA443`; no ad-hoc UI colours, gradients or shadows. Curated logo gradients use the approved palette; custom gradients are project data entered through `GradientMaker`.
 - [ ] No left color accent bar.
 - [ ] Glass only on large surfaces; chips and badges flat.
 - [ ] Issue status uses a tinted status cell with icon + label; priority uses a soft tinted icon + label badge.
 - [ ] Status/priority selects use `Select` and keep visible labels.
 - [ ] Issue IDs render as plain split text: muted project prefix, highlighted number.
 - [ ] List grouping, the optional Backlog column and the Done preview keep localStorage preferences and remain keyboard accessible.
-- [ ] Epic cards show progress and a status-count bar; the detail view renders Markdown and a task table.
+- [ ] Epic cards and epic detail show a prominent done/total, a `tablon-progress` rail and `IssueStatusCounts`; no split status bar remains.
+- [ ] Done epic cards are visibly muted; epic cards have no actions, while the detail view owns Edit/Delete.
+- [ ] Project cards use the same progress rail and prominent done/total; project create/settings expose `LogoPicker` (curated or custom) and `EmojiPicker`.
+- [ ] The emoji picker searches, remembers recents, supports custom emoji, closes on Esc/light dismiss, and becomes a bottom sheet on mobile.
+- [ ] The Projects disclosure is open on Projects routes, collapses on Settings, lists logo/emoji rows and marks the active project with `aria-current`.
+- [ ] Issue detail's main column has no glass shell; properties and comments keep their surface panels.
 - [ ] Markdown descriptions sanitize HTML, allow https images, and support tables and task lists.
 - [ ] Route entry/top-layer motion respects reduced motion and focus moves to the new heading.
 - [ ] One primary action per view; fewer elements than the last pass.

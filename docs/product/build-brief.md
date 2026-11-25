@@ -28,6 +28,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
 
 - Dark only. No light theme. (user, 2026-11-23)
 - Project logo: default gradient tile plus optional emoji. (user, 2026-11-23)
+- Project identity: visual emoji picker, curated gradient tiles and a custom two-stop gradient maker. (user, 2026-11-25)
 - Project statuses: Planning, Active, Archived, Done. (user, 2026-11-23)
 - Issue slugs `in-progress` and `in-review`; epic statuses Backlog, In Progress, Done. (user, 2026-11-23)
 - Comments can be edited and deleted. (user, 2026-11-23)
@@ -49,7 +50,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
 - **Claim/release (model):** `POST /api/v1/issues/{id}/claim` sets `agent_id` only when unclaimed; `409` when taken; `POST /api/v1/issues/{id}/release` requires the matching agent; no TTL, queue or scheduler.
 - **Auth (model):** `TABLON_API_TOKEN` is optional and empty by default. When set, it gates all `/api/v1` reads and writes; `/health` and `/ready` stay public. SPA uses an unlock screen and `sessionStorage`; SSE uses `fetch` streaming with `Authorization`. Native default binds `127.0.0.1`; Compose binds loopback by default. A non-loopback bind without a token logs one informational line, never blocks.
 - **Project status tones (model):** Planning `--status-backlog`, Active `--status-progress`, Done `--status-done`, Archived `--text-3`.
-- **Logo (model):** eight curated gradient pairs in `app.css`, selected deterministically from the project ID; emoji overrides the gradient.
+- **Logo (model):** eight curated gradient pairs in `app.css`, selected deterministically from the project ID, plus an optional custom two-stop gradient (`logo_gradient_from`, `logo_gradient_to`, `logo_gradient_angle`); an emoji sits on top.
 - **Milestones (model):**
   - M1: project/issue/epic CRUD, SQLite, REST, minimal UI (dashboard, list, detail), tests. Checkpoint.
   - M2: board, comments edit/delete, CLI, `AGENTS.md`, SSE.

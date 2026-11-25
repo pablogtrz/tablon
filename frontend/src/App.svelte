@@ -2,12 +2,14 @@
   import Brand from '$lib/components/tablon/Brand.svelte'
   import LiveIndicator from '$lib/components/tablon/LiveIndicator.svelte'
   import MobileNav from '$lib/components/tablon/MobileNav.svelte'
+  import ProjectNav from '$lib/components/tablon/ProjectNav.svelte'
   import Dashboard from '$lib/views/Dashboard.svelte'
   import EpicView from '$lib/views/EpicView.svelte'
   import NotFound from '$lib/views/NotFound.svelte'
   import ProjectView from '$lib/views/ProjectView.svelte'
   import SettingsView from '$lib/views/SettingsView.svelte'
   import { navigate, parseRoute, route } from '$lib/router.svelte'
+  import { refreshProjectNav } from '$lib/project-nav.svelte'
   import { motion } from '$lib/motion.svelte'
   import LayoutGrid from '@lucide/svelte/icons/layout-grid'
   import Menu from '@lucide/svelte/icons/menu'
@@ -36,6 +38,10 @@
     })
   })
 
+  $effect(() => {
+    if (projectsActive) void refreshProjectNav()
+  })
+
   const navClass = (active: boolean) =>
     `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
       active
@@ -50,19 +56,8 @@
       <Brand />
     </div>
 
-    <nav class="flex-1 space-y-1 px-3 py-2" aria-label="Main">
-      <a
-        href="/"
-        aria-current={projectsActive ? 'page' : undefined}
-        class={navClass(projectsActive)}
-        onclick={(event) => {
-          event.preventDefault()
-          navigate('/')
-        }}
-      >
-        <LayoutGrid size={16} strokeWidth={1.6} class={projectsActive ? 'text-primary' : 'text-[var(--text-3)]'} aria-hidden="true" />
-        Projects
-      </a>
+    <nav class="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Main">
+      <ProjectNav />
       <a
         href="/settings"
         aria-current={settingsActive ? 'page' : undefined}

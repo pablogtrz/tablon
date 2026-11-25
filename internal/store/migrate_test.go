@@ -17,8 +17,8 @@ func TestMigrateIsIdempotentAndEnablesWAL(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 3 {
-		t.Fatalf("migrations = %d, want 3", count)
+	if count != 4 {
+		t.Fatalf("migrations = %d, want 4", count)
 	}
 
 	var mode string

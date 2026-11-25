@@ -124,7 +124,8 @@ func scanProject(row rowScanner) (domain.Project, error) {
 	var created, updated string
 	if err := row.Scan(
 		&p.ID, &p.Identifier, &p.Name, &p.Description, &p.Status,
-		&p.LogoGradient, &p.LogoEmoji, &created, &updated,
+		&p.LogoGradient, &p.LogoEmoji, &p.LogoGradientFrom, &p.LogoGradientTo,
+		&p.LogoGradientAngle, &created, &updated,
 	); err != nil {
 		return domain.Project{}, err
 	}
@@ -138,7 +139,8 @@ func scanProjectListItem(row rowScanner) (domain.ProjectListItem, error) {
 	var created, updated string
 	if err := row.Scan(
 		&item.ID, &item.Identifier, &item.Name, &item.Description, &item.Status,
-		&item.LogoGradient, &item.LogoEmoji, &created, &updated,
+		&item.LogoGradient, &item.LogoEmoji, &item.LogoGradientFrom, &item.LogoGradientTo,
+		&item.LogoGradientAngle, &created, &updated,
 		&item.EpicCount, &item.IssueCount, &item.DoneCount,
 	); err != nil {
 		return domain.ProjectListItem{}, err

@@ -132,6 +132,9 @@ export interface CreateProjectInput {
   status?: ProjectStatus
   logo_gradient?: number
   logo_emoji?: string
+  logo_gradient_from?: string
+  logo_gradient_to?: string
+  logo_gradient_angle?: number
 }
 
 export interface UpdateProjectInput {
@@ -140,6 +143,9 @@ export interface UpdateProjectInput {
   status?: ProjectStatus
   logo_gradient?: number
   logo_emoji?: string
+  logo_gradient_from?: string
+  logo_gradient_to?: string
+  logo_gradient_angle?: number
 }
 
 export interface CreateEpicInput {
