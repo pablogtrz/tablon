@@ -2,6 +2,7 @@
   import Check from '@lucide/svelte/icons/check'
   import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal'
   import GradientMaker from './GradientMaker.svelte'
+  import { hasCustomGradient, logoGradient } from '$lib/logo'
   import { LOGO_GRADIENT_OPTIONS } from '$lib/meta'
   import { cn } from '$lib/utils'
 
@@ -24,11 +25,11 @@
     class?: string
   } = $props()
 
-  const custom = $derived(Boolean(from && to))
+  const custom = $derived(hasCustomGradient(from, to))
   const customPreview = $derived(
     custom
-      ? `linear-gradient(${angle}deg, ${from} 0%, ${to} 100%)`
-      : `linear-gradient(135deg, ${DEFAULT_FROM} 0%, ${DEFAULT_TO} 100%)`,
+      ? logoGradient(from, to, angle)
+      : logoGradient(DEFAULT_FROM, DEFAULT_TO, 135),
   )
 
   function chooseCustom() {

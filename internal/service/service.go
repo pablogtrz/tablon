@@ -21,6 +21,8 @@ import (
 var identifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 var gradientColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
+const defaultGradientAngle = 135
+
 type Publisher interface {
 	Publish(event events.Event)
 }
@@ -132,7 +134,7 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (dom
 		gradient = *in.LogoGradient
 	}
 
-	angle := 135
+	angle := defaultGradientAngle
 	if in.LogoGradientAngle != nil {
 		angle = *in.LogoGradientAngle
 	}
@@ -856,10 +858,13 @@ func normalizeGradient(from, to string, angle int) (string, string, int, error) 
 		return "", "", 0, err
 	}
 	if from == "" && to == "" {
-		return "", "", angle, nil
+		return "", "", defaultGradientAngle, nil
 	}
-	if from == "" || to == "" {
+	if from == "" {
 		return "", "", 0, domain.Invalid("logo_gradient_from", "both gradient colours are required")
+	}
+	if to == "" {
+		return "", "", 0, domain.Invalid("logo_gradient_to", "both gradient colours are required")
 	}
 	if !gradientColorPattern.MatchString(from) {
 		return "", "", 0, domain.Invalid("logo_gradient_from", "must be a hex colour like #ffa443")

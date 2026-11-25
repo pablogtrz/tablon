@@ -247,3 +247,17 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
 ]
 
 export const EMOJI_ITEMS: EmojiItem[] = EMOJI_CATEGORIES.flatMap((category) => category.items)
+
+const graphemeSegmenter =
+  typeof Intl !== 'undefined' && 'Segmenter' in Intl
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null
+
+export function firstGrapheme(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (graphemeSegmenter) {
+    return Array.from(graphemeSegmenter.segment(trimmed))[0]?.segment ?? ''
+  }
+  return Array.from(trimmed)[0] ?? ''
+}

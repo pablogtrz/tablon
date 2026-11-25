@@ -1054,6 +1054,7 @@ components:
           type: integer
           minimum: 0
           maximum: 360
+          default: 135
         created_at:
           type: string
           format: date-time
@@ -1252,6 +1253,7 @@ components:
           type: integer
           minimum: 0
           maximum: 360
+          default: 135
 
     UpdateProjectRequest:
       type: object
@@ -1276,11 +1278,11 @@ components:
           type: string
         logo_gradient_from:
           type: string
-          description: Start colour for a custom two-stop gradient. Send both colours to enable it; empty strings clear it.
+          description: Start colour for a custom two-stop gradient. Send both colours as empty strings to clear it.
           pattern: '^(#[0-9a-fA-F]{6})?$'
         logo_gradient_to:
           type: string
-          description: End colour for a custom two-stop gradient. Send both colours to enable it; empty strings clear it.
+          description: End colour for a custom two-stop gradient. Send both colours as empty strings to clear it.
           pattern: '^(#[0-9a-fA-F]{6})?$'
         logo_gradient_angle:
           type: integer

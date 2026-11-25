@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import Button from '$lib/components/tablon/Button.svelte'
   import EmojiPicker from '$lib/components/tablon/EmojiPicker.svelte'
   import LogoPicker from '$lib/components/tablon/LogoPicker.svelte'
@@ -32,17 +33,23 @@
   let saving = $state(false)
   let error = $state('')
 
+  let wasOpen = false
+
   $effect(() => {
-    if (!open) return
-    name = project.name
-    description = project.description
-    status = project.status
-    emoji = project.logo_emoji
-    gradient = project.logo_gradient
-    gradientFrom = project.logo_gradient_from
-    gradientTo = project.logo_gradient_to
-    gradientAngle = project.logo_gradient_angle
-    error = ''
+    if (open && !wasOpen) {
+      untrack(() => {
+        name = project.name
+        description = project.description
+        status = project.status
+        emoji = project.logo_emoji
+        gradient = project.logo_gradient
+        gradientFrom = project.logo_gradient_from
+        gradientTo = project.logo_gradient_to
+        gradientAngle = project.logo_gradient_angle
+        error = ''
+      })
+    }
+    wasOpen = open
   })
 
   async function submit() {

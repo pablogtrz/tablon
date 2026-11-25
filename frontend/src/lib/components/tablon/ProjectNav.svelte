@@ -10,7 +10,8 @@
 
   let { onNavigate }: { onNavigate?: () => void } = $props()
 
-  const listId = 'project-nav-' + Math.random().toString(36).slice(2)
+  const uid = $props.id()
+  const listId = `project-nav-${uid}`
   const page = $derived(parseRoute(route.path))
   const projectsActive = $derived(route.path === '/' || route.path.startsWith('/projects'))
   const dashboardActive = $derived(page.name === 'dashboard')
@@ -19,7 +20,7 @@
   )
 
   let open = $state(untrack(() => projectsActive))
-  let lastActive = $state(untrack(() => projectsActive))
+  let lastActive = untrack(() => projectsActive)
 
   $effect(() => {
     if (projectsActive === lastActive) return
@@ -91,10 +92,10 @@
     </button>
   </div>
 
-  {#if open}
+  <div id={listId} hidden={!open}>
     {#if !projectNav.loaded}
       {#if projectNav.error}
-        <div id={listId} class="mt-1 px-2.5 py-1.5 text-[11px] text-[var(--text-3)]">
+        <div class="mt-1 px-2.5 py-1.5 text-[11px] text-[var(--text-3)]">
           {projectNav.error}
           <button
             type="button"
@@ -105,14 +106,14 @@
           </button>
         </div>
       {:else}
-        <div id={listId} class="mt-1 space-y-1 pl-2" aria-hidden="true">
+        <div class="mt-1 space-y-1 pl-2" aria-hidden="true">
           {#each Array(3) as _}
             <div class="h-10 animate-pulse rounded-lg bg-white/[.05] motion-reduce:animate-none lg:h-9"></div>
           {/each}
         </div>
       {/if}
     {:else if projectNav.error && projectNav.items.length === 0}
-      <div id={listId} class="mt-1 px-2.5 py-1.5 text-[11px] text-[var(--text-3)]">
+      <div class="mt-1 px-2.5 py-1.5 text-[11px] text-[var(--text-3)]">
         {projectNav.error}
         <button
           type="button"
@@ -123,7 +124,7 @@
         </button>
       </div>
     {:else}
-      <ul id={listId} class="mt-1 space-y-0.5 pl-2" aria-label="Projects">
+      <ul class="mt-1 space-y-0.5 pl-2" aria-label="Projects">
         {#each projectNav.items as project (project.id)}
           {@const current = isCurrent(project)}
           <li>
@@ -160,5 +161,5 @@
         {/each}
       </ul>
     {/if}
-  {/if}
+  </div>
 </div>

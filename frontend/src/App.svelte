@@ -9,12 +9,12 @@
   import ProjectView from '$lib/views/ProjectView.svelte'
   import SettingsView from '$lib/views/SettingsView.svelte'
   import { navigate, parseRoute, route } from '$lib/router.svelte'
-  import { refreshProjectNav } from '$lib/project-nav.svelte'
+  import { projectNav, refreshProjectNav } from '$lib/project-nav.svelte'
   import { motion } from '$lib/motion.svelte'
   import LayoutGrid from '@lucide/svelte/icons/layout-grid'
   import Menu from '@lucide/svelte/icons/menu'
   import SettingsIcon from '@lucide/svelte/icons/settings'
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { cubicOut } from 'svelte/easing'
   import { fly } from 'svelte/transition'
 
@@ -39,7 +39,11 @@
   })
 
   $effect(() => {
-    if (projectsActive) void refreshProjectNav()
+    if (!projectsActive) return
+    untrack(() => {
+      if (projectNav.loading) return
+      void refreshProjectNav()
+    })
   })
 
   const navClass = (active: boolean) =>

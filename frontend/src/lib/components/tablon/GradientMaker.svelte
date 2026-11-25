@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logoGradient } from '$lib/logo'
   import { labelClass } from '$lib/ui'
 
   let {
@@ -12,7 +13,7 @@
   } = $props()
 
   const angleId = $props.id()
-  const preview = $derived(`linear-gradient(${angle}deg, ${from} 0%, ${to} 100%)`)
+  const preview = $derived(logoGradient(from, to, angle))
 </script>
 
 <div class="space-y-3 rounded-xl border border-border bg-[var(--surface-1)] p-3">

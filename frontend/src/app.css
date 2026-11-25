@@ -342,7 +342,7 @@
 /* Emoji picker: anchored popover on desktop, bottom sheet on small screens. */
 .emoji-popover {
   position: absolute;
-  position-area: block-end span-inline-start;
+  position-area: block-end span-inline-end;
   position-try-fallbacks: flip-block, flip-inline;
   inset: auto;
   width: min(92vw, 22.5rem);

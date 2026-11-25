@@ -50,7 +50,7 @@ A self-hosted, single-user issue tracker that a human runs with one binary or Do
 - **Claim/release (model):** `POST /api/v1/issues/{id}/claim` sets `agent_id` only when unclaimed; `409` when taken; `POST /api/v1/issues/{id}/release` requires the matching agent; no TTL, queue or scheduler.
 - **Auth (model):** `TABLON_API_TOKEN` is optional and empty by default. When set, it gates all `/api/v1` reads and writes; `/health` and `/ready` stay public. SPA uses an unlock screen and `sessionStorage`; SSE uses `fetch` streaming with `Authorization`. Native default binds `127.0.0.1`; Compose binds loopback by default. A non-loopback bind without a token logs one informational line, never blocks.
 - **Project status tones (model):** Planning `--status-backlog`, Active `--status-progress`, Done `--status-done`, Archived `--text-3`.
-- **Logo (model):** eight curated gradient pairs in `app.css`, selected deterministically from the project ID, plus an optional custom two-stop gradient (`logo_gradient_from`, `logo_gradient_to`, `logo_gradient_angle`); an emoji sits on top.
+- **Logo (model):** eight curated gradient pairs in `app.css`; the create UI starts on Amber and lets the user pick another, while API clients that omit `logo_gradient` keep the deterministic project-ID fallback. An optional custom two-stop gradient (`logo_gradient_from`, `logo_gradient_to`, `logo_gradient_angle`) takes precedence; an emoji sits on top.
 - **Milestones (model):**
   - M1: project/issue/epic CRUD, SQLite, REST, minimal UI (dashboard, list, detail), tests. Checkpoint.
   - M2: board, comments edit/delete, CLI, `AGENTS.md`, SSE.

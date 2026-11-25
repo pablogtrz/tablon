@@ -77,10 +77,10 @@ func (p Priority) Valid() bool {
 }
 
 type Project struct {
-	ID           string        `json:"id"`
-	Identifier   string        `json:"identifier"`
-	Name         string        `json:"name"`
-	Description  string        `json:"description"`
+	ID                string        `json:"id"`
+	Identifier        string        `json:"identifier"`
+	Name              string        `json:"name"`
+	Description       string        `json:"description"`
 	Status            ProjectStatus `json:"status"`
 	LogoGradient      int           `json:"logo_gradient"`
 	LogoEmoji         string        `json:"logo_emoji"`

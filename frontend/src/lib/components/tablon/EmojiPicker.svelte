@@ -14,13 +14,14 @@
   import Utensils from '@lucide/svelte/icons/utensils'
   import X from '@lucide/svelte/icons/x'
   import Button from './Button.svelte'
-  import { EMOJI_CATEGORIES, EMOJI_ITEMS } from '$lib/emoji'
+  import { EMOJI_CATEGORIES, EMOJI_ITEMS, firstGrapheme } from '$lib/emoji'
   import type { EmojiItem } from '$lib/emoji'
   import { readPreference, writePreference } from '$lib/preferences'
   import { inputClass, labelClass } from '$lib/ui'
   import { cn } from '$lib/utils'
 
   const uid = $props.id()
+  const labelId = `emoji-label-${uid}`
   const panelId = `emoji-panel-${uid}`
   const customInputId = `emoji-custom-${uid}`
   const anchorName = `--emoji-anchor-${uid}`
@@ -49,6 +50,7 @@
 
   let { value = $bindable('') } = $props()
 
+  let trigger = $state<HTMLButtonElement>()
   let panel = $state<HTMLDivElement>()
   let searchInput = $state<HTMLInputElement>()
   let customInput = $state<HTMLInputElement>()
@@ -93,11 +95,31 @@
     writePreference('emoji.recent', JSON.stringify(recent))
   }
 
+  function resetPanelState() {
+    customMode = false
+    query = ''
+  }
+
+  function restoreFocus() {
+    const active = document.activeElement
+    const deliberate =
+      active instanceof HTMLElement &&
+      active.matches('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])') &&
+      !panel?.contains(active)
+    if (!deliberate) trigger?.focus()
+  }
+
+  function closeFallback() {
+    fallbackOpen = false
+    resetPanelState()
+    void tick().then(restoreFocus)
+  }
+
   function closePanel() {
     if (supportsPopover) {
       panel?.hidePopover?.()
     } else {
-      fallbackOpen = false
+      closeFallback()
     }
   }
 
@@ -109,8 +131,12 @@
 
   function toggleFallback() {
     if (supportsPopover) return
-    fallbackOpen = !fallbackOpen
-    if (fallbackOpen) void tick().then(() => searchInput?.focus())
+    if (fallbackOpen) {
+      closeFallback()
+      return
+    }
+    fallbackOpen = true
+    void tick().then(() => searchInput?.focus())
   }
 
   function openCustom() {
@@ -120,10 +146,10 @@
   }
 
   function applyCustom() {
-    const next = customDraft.trim()
+    const next = firstGrapheme(customDraft)
     if (!next) return
     value = next
-    customMode = false
+    remember(next)
     closePanel()
   }
 
@@ -143,18 +169,33 @@
     if (open) {
       void tick().then(() => searchInput?.focus())
     } else {
-      customMode = false
-      query = ''
+      resetPanelState()
+      void tick().then(restoreFocus)
     }
   }
 
   onMount(() => {
     if (supportsPopover) return
-    const onKeydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') fallbackOpen = false
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!fallbackOpen) return
+      const target = event.target as Node | null
+      if (panel?.contains(target) || trigger?.contains(target)) return
+      closeFallback()
     }
-    window.addEventListener('keydown', onKeydown)
-    return () => window.removeEventListener('keydown', onKeydown)
+    const onKeydown = (event: KeyboardEvent) => {
+      if (!fallbackOpen || event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      closeFallback()
+    }
+
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeydown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeydown, true)
+    }
   })
 </script>
 
@@ -164,7 +205,7 @@
       <button
         type="button"
         class={cn(
-          'grid size-10 place-items-center rounded-lg text-xl leading-none transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9',
+          'grid size-10 place-items-center overflow-hidden rounded-lg text-xl leading-none transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9',
           value === item.emoji && 'bg-[var(--surface-2)] ring-1 ring-[var(--ring)]',
         )}
         aria-label={item.label}
@@ -178,12 +219,14 @@
 {/snippet}
 
 <div>
-  <span class={labelClass}>Emoji</span>
+  <span id={labelId} class={labelClass}>Emoji</span>
   <div class="flex items-center gap-2">
     <button
+      bind:this={trigger}
       type="button"
       popovertarget={supportsPopover ? panelId : undefined}
       aria-controls={panelId}
+      aria-describedby={labelId}
       aria-expanded={expanded}
       aria-haspopup="dialog"
       style="anchor-name: {anchorName}"
@@ -191,7 +234,7 @@
       onclick={toggleFallback}
     >
       {#if value}
-        <span class="text-lg leading-none">{value}</span>
+        <span class="max-w-10 overflow-hidden text-ellipsis whitespace-nowrap text-lg leading-none">{value}</span>
         <span>Change emoji</span>
       {:else}
         <Smile size={16} strokeWidth={1.6} class="text-[var(--text-3)]" aria-hidden="true" />
@@ -334,7 +377,7 @@
             autocomplete="off"
             onkeydown={onCustomKeydown}
           />
-          <Button class="h-9 px-3 text-xs" disabled={!customDraft.trim()} onclick={applyCustom}>
+          <Button class="h-9 px-3 text-xs" disabled={!firstGrapheme(customDraft)} onclick={applyCustom}>
             Use
           </Button>
         </div>

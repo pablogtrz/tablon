@@ -248,6 +248,32 @@ func TestValidationAndDecodeErrors(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("unknown field status = %d, want 400", status)
 	}
+	status, body = a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name": "One-sided gradient", "logo_gradient_from": "#aabbcc",
+	}, nil)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("one-sided gradient status = %d, body = %s", status, body)
+	}
+	var validation struct {
+		Error struct {
+			Details struct {
+				Field string `json:"field"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &validation); err != nil {
+		t.Fatalf("decode validation error: %v", err)
+	}
+	if validation.Error.Details.Field != "logo_gradient_to" {
+		t.Fatalf("validation field = %q, want logo_gradient_to", validation.Error.Details.Field)
+	}
+	status, _ = a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name": "Bad angle", "logo_gradient_from": "#aabbcc",
+		"logo_gradient_to": "#ddeeff", "logo_gradient_angle": 361,
+	}, nil)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("bad gradient angle status = %d, want 422", status)
+	}
 }
 
 func TestProjectCountsArchiveAndIssuePagination(t *testing.T) {
@@ -591,5 +617,78 @@ func TestProjectEventsStopsWhenHubCloses(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("stream did not close after hub.Close")
+	}
+}
+
+func TestProjectCustomGradientAPIRoundTrip(t *testing.T) {
+	a := newTestAPI(t, "")
+
+	status, body := a.do(t, http.MethodPost, "/api/v1/projects", map[string]any{
+		"name":                "Gradient project",
+		"identifier":          "GRAD",
+		"logo_gradient":       3,
+		"logo_gradient_from":  "#FFA443",
+		"logo_gradient_to":    "#8B5CF6",
+		"logo_gradient_angle": 45,
+	}, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("create project status = %d, body = %s", status, body)
+	}
+	project := decode[map[string]any](t, body)
+	if project["logo_gradient_from"] != "#ffa443" || project["logo_gradient_to"] != "#8b5cf6" {
+		t.Fatalf("created gradient = %#v", project)
+	}
+	if project["logo_gradient_angle"] != float64(45) {
+		t.Fatalf("created angle = %#v", project["logo_gradient_angle"])
+	}
+
+	status, body = a.do(t, http.MethodGet, "/api/v1/projects/GRAD", nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("get project status = %d, body = %s", status, body)
+	}
+	project = decode[map[string]any](t, body)
+	if project["logo_gradient_from"] != "#ffa443" || project["logo_gradient_to"] != "#8b5cf6" {
+		t.Fatalf("read gradient = %#v", project)
+	}
+
+	status, body = a.do(t, http.MethodPatch, "/api/v1/projects/GRAD", map[string]any{
+		"logo_gradient_from": "#112233",
+	}, nil)
+	if status != http.StatusOK {
+		t.Fatalf("partial patch status = %d, body = %s", status, body)
+	}
+	project = decode[map[string]any](t, body)
+	if project["logo_gradient_from"] != "#112233" || project["logo_gradient_to"] != "#8b5cf6" {
+		t.Fatalf("partial gradient update = %#v", project)
+	}
+
+	status, body = a.do(t, http.MethodPatch, "/api/v1/projects/GRAD", map[string]any{
+		"logo_gradient_from": "",
+		"logo_gradient_to":   "",
+	}, nil)
+	if status != http.StatusOK {
+		t.Fatalf("clear patch status = %d, body = %s", status, body)
+	}
+	project = decode[map[string]any](t, body)
+	if project["logo_gradient_from"] != "" || project["logo_gradient_to"] != "" {
+		t.Fatalf("cleared gradient = %#v", project)
+	}
+	if project["logo_gradient_angle"] != float64(135) {
+		t.Fatalf("cleared angle = %#v, want 135", project["logo_gradient_angle"])
+	}
+
+	status, body = a.do(t, http.MethodGet, "/api/v1/projects", nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list projects status = %d, body = %s", status, body)
+	}
+	page := decode[struct {
+		Items []map[string]any `json:"items"`
+	}](t, body)
+	if len(page.Items) != 1 {
+		t.Fatalf("projects = %d, want 1", len(page.Items))
+	}
+	listed := page.Items[0]
+	if listed["logo_gradient_from"] != "" || listed["logo_gradient_to"] != "" || listed["logo_gradient_angle"] != float64(135) {
+		t.Fatalf("listed gradient = %#v", listed)
 	}
 }

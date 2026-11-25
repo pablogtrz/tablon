@@ -16,7 +16,8 @@ Tokens and base styles live in `frontend/src/app.css`. This file explains how to
 | `frontend/src/lib/meta.ts` | Status/priority icons, tones and select options. |
 | `frontend/src/lib/issue-grouping.ts` | List grouping by none, epic, status or agent. |
 | `frontend/src/lib/preferences.ts` | Typed, best-effort localStorage preferences. |
-| `frontend/src/lib/emoji.ts` | Emoji categories and labels for `EmojiPicker`. |
+| `frontend/src/lib/emoji.ts` | Emoji categories, labels and grapheme helper for `EmojiPicker`. |
+| `frontend/src/lib/logo.ts` | Shared custom-gradient helpers for logo previews and pickers. |
 | `frontend/src/lib/confetti.ts` | One-shot canvas completion burst; reduced motion is a no-op. |
 | `frontend/src/lib/markdown.ts` | Markdown render, sanitization, code block affordances and task toggling. |
 | `frontend/src/lib/editor-theme.ts` | CodeMirror theme and custom Markdown decorations. |
