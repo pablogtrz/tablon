@@ -16,7 +16,7 @@
   import ProjectLogo from '$lib/components/tablon/ProjectLogo.svelte'
   import ProjectSettingsModal from '$lib/components/tablon/ProjectSettingsModal.svelte'
   import ProjectStatusBadge from '$lib/components/tablon/ProjectStatusBadge.svelte'
-  import { deleteEpic, deleteProject, getProject, listAllIssues, listEpics, listIssues, updateIssueStatus } from '$lib/api'
+  import { deleteProject, getProject, listAllIssues, listEpics, listIssues, updateIssueStatus } from '$lib/api'
   import { applyBoardMove } from '$lib/board'
   import { burstConfetti } from '$lib/confetti'
   import { subscribeProjectEvents } from '$lib/events'
@@ -25,6 +25,7 @@
   import { isAbortError, messageOf } from '$lib/errors'
   import { relativeTime } from '$lib/format'
   import { setLiveState } from '$lib/live.svelte'
+  import { patchProjectNav, removeProjectNav } from '$lib/project-nav.svelte'
   import { issuePath, epicPath, navigate } from '$lib/router.svelte'
   import type { Epic, Issue, IssueStatus, Project } from '$lib/types'
 
@@ -76,11 +77,8 @@
   let projectSettingsOpen = $state(false)
   let issueOpen = $state(false)
   let epicOpen = $state(false)
-  let editingEpic = $state<Epic | null>(null)
 
   let deleteProjectOpen = $state(false)
-  let deleteEpicOpen = $state(false)
-  let deletingEpic = $state<Epic | null>(null)
   let deleting = $state(false)
   let deleteError = $state('')
 
@@ -345,24 +343,12 @@
   }
 
   function openNewEpic() {
-    editingEpic = null
-    epicOpen = true
-  }
-
-  function openEditEpic(epic: Epic) {
-    editingEpic = epic
     epicOpen = true
   }
 
   function openDeleteProject() {
     deleteError = ''
     deleteProjectOpen = true
-  }
-
-  function openDeleteEpic(epic: Epic) {
-    deleteError = ''
-    deletingEpic = epic
-    deleteEpicOpen = true
   }
 
   function clearFilters() {
@@ -378,23 +364,8 @@
     deleteError = ''
     try {
       await deleteProject(project.identifier)
+      removeProjectNav(project.id)
       navigate('/')
-    } catch (err) {
-      deleteError = messageOf(err)
-    } finally {
-      deleting = false
-    }
-  }
-
-  async function submitDeleteEpic() {
-    if (!deletingEpic || deleting) return
-    deleting = true
-    deleteError = ''
-    try {
-      await deleteEpic(deletingEpic.id)
-      deleteEpicOpen = false
-      deletingEpic = null
-      await Promise.all([reloadEpics(), loadIssues(), loadEpicIssues()])
     } catch (err) {
       deleteError = messageOf(err)
     } finally {
@@ -408,6 +379,7 @@
 
   function onProjectSaved(updated: Project) {
     project = updated
+    patchProjectNav(updated)
   }
 
   function onEpicSaved() {
@@ -480,7 +452,15 @@
 
     <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div class="flex min-w-0 gap-3.5 lg:flex-1">
-        <ProjectLogo gradient={project.logo_gradient} emoji={project.logo_emoji} name={project.name} size="lg" />
+        <ProjectLogo
+          gradient={project.logo_gradient}
+          from={project.logo_gradient_from}
+          to={project.logo_gradient_to}
+          angle={project.logo_gradient_angle}
+          emoji={project.logo_emoji}
+          name={project.name}
+          size="lg"
+        />
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h1 bind:this={heading} class="truncate text-xl font-semibold tracking-[-.02em] outline-none" tabindex="-1" data-route-focus>{project.name}</h1>
@@ -634,8 +614,6 @@
             loading={false}
             statsLoading={epicIssuesLoading}
             onopen={openEpic}
-            onedit={openEditEpic}
-            ondelete={openDeleteEpic}
           />
         {/if}
       </div>
@@ -645,7 +623,7 @@
   {#if project}
     <ProjectSettingsModal bind:open={projectSettingsOpen} {project} onsaved={onProjectSaved} />
     <IssueCreateModal bind:open={issueOpen} projectRef={apiRef} {epics} oncreated={onIssueCreated} />
-    <EpicFormModal bind:open={epicOpen} projectRef={apiRef} epic={editingEpic} onsaved={onEpicSaved} />
+    <EpicFormModal bind:open={epicOpen} projectRef={apiRef} onsaved={onEpicSaved} />
 
     <ConfirmModal
       bind:open={deleteProjectOpen}
@@ -656,15 +634,6 @@
       busy={deleting}
       error={deleteError}
       onconfirm={() => void submitDeleteProject()}
-    />
-    <ConfirmModal
-      bind:open={deleteEpicOpen}
-      title="Delete epic"
-      description={deletingEpic ? `Delete “${deletingEpic.title}”? Its issues will become unassigned.` : 'Delete this epic? Its issues will become unassigned.'}
-      confirmLabel="Delete epic"
-      busy={deleting}
-      error={deleteError}
-      onconfirm={() => void submitDeleteEpic()}
     />
   {/if}
 {/if}

@@ -82,6 +82,9 @@ export interface Project {
   status: ProjectStatus
   logo_gradient: number
   logo_emoji: string
+  logo_gradient_from: string
+  logo_gradient_to: string
+  logo_gradient_angle: number
   created_at: string
   updated_at: string
 }

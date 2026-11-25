@@ -80,8 +80,8 @@
   --priority-none-soft: rgba(138, 148, 144, 0.12);
 
   /* Epic done card */
-  --epic-done-bg: rgba(110, 231, 176, 0.055);
-  --epic-done-border: rgba(110, 231, 176, 0.18);
+  --epic-done-bg: rgba(110, 231, 176, 0.025);
+  --epic-done-border: rgba(110, 231, 176, 0.1);
 
   /* Agent */
   --agent: #67d4f5;
@@ -95,6 +95,9 @@
   --logo-5: linear-gradient(135deg, #f5d547 0%, #f59e0b 100%);
   --logo-6: linear-gradient(135deg, #a7b0ab 0%, #64748b 100%);
   --logo-7: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+
+  /* Progress */
+  --progress-h: 8px;
 
   /* Shape */
   --r-xs: 6px;
@@ -336,37 +339,61 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Determinate progress rail used by epics. */
-progress.epic-progress {
+/* Emoji picker: anchored popover on desktop, bottom sheet on small screens. */
+.emoji-popover {
+  position: absolute;
+  position-area: block-end span-inline-end;
+  position-try-fallbacks: flip-block, flip-inline;
+  inset: auto;
+  width: min(92vw, 22.5rem);
+  margin-block-start: 0.5rem;
+}
+
+@media (max-width: 639px) {
+  .emoji-popover {
+    position: fixed;
+    position-area: none;
+    inset: auto 0 0;
+    width: 100%;
+    margin: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+  }
+}
+
+/* Determinate progress rail shared by epics and project cards. */
+progress.tablon-progress {
   appearance: none;
   display: block;
   inline-size: 100%;
-  block-size: 5px;
+  block-size: var(--progress-h);
   border: 0 solid;
   border-radius: var(--r-full);
   background: rgba(255, 255, 255, 0.09);
   overflow: clip;
 }
 
-progress.epic-progress::-webkit-progress-bar {
+progress.tablon-progress::-webkit-progress-bar {
   background: transparent;
 }
 
-progress.epic-progress::-webkit-progress-value {
+progress.tablon-progress::-webkit-progress-value {
   border-radius: var(--r-full);
   background: var(--progress-fill, var(--brand));
   transition: inline-size var(--dur-slower) var(--ease);
 }
 
-progress.epic-progress::-moz-progress-bar {
+progress.tablon-progress::-moz-progress-bar {
   border-radius: var(--r-full);
   background: var(--progress-fill, var(--brand));
   transition: inline-size var(--dur-slower) var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  progress.epic-progress::-webkit-progress-value,
-  progress.epic-progress::-moz-progress-bar {
+  progress.tablon-progress::-webkit-progress-value,
+  progress.tablon-progress::-moz-progress-bar {
     transition: none;
   }
 }

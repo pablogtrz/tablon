@@ -1,7 +1,7 @@
 <script lang="ts">
   import { navigate, route } from '$lib/router.svelte'
   import Brand from './Brand.svelte'
-  import LayoutGrid from '@lucide/svelte/icons/layout-grid'
+  import ProjectNav from './ProjectNav.svelte'
   import SettingsIcon from '@lucide/svelte/icons/settings'
   import X from '@lucide/svelte/icons/x'
 
@@ -18,7 +18,6 @@
     }
   })
 
-  const projectsActive = $derived(route.path === '/' || route.path.startsWith('/projects'))
   const settingsActive = $derived(route.path === '/settings')
 
   function go(to: string) {
@@ -50,17 +49,8 @@
       </button>
     </div>
 
-    <nav class="flex-1 space-y-1 px-3 py-3">
-      <button
-        type="button"
-        class="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors {projectsActive
-          ? 'bg-[var(--surface-2)] text-foreground'
-          : 'text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-foreground'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onclick={() => go('/')}
-      >
-        <LayoutGrid size={16} strokeWidth={1.6} class={projectsActive ? 'text-primary' : 'text-[var(--text-3)]'} aria-hidden="true" />
-        Projects
-      </button>
+    <nav class="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Main">
+      <ProjectNav onNavigate={() => (open = false)} />
       <button
         type="button"
         class="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors {settingsActive

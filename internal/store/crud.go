@@ -44,11 +44,13 @@ func (s *Store) CreateProject(ctx context.Context, p domain.Project) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO projects (
 			id, identifier, name, description, status, logo_gradient, logo_emoji,
+			logo_gradient_from, logo_gradient_to, logo_gradient_angle,
 			issue_counter, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	`,
 		p.ID, p.Identifier, p.Name, p.Description, p.Status, p.LogoGradient,
-		p.LogoEmoji, formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
+		p.LogoEmoji, p.LogoGradientFrom, p.LogoGradientTo, p.LogoGradientAngle,
+		formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
 	); err != nil {
 		if isUnique(err) {
 			return domain.ErrConflict
@@ -62,6 +64,7 @@ func (s *Store) CreateProject(ctx context.Context, p domain.Project) error {
 func (s *Store) GetProject(ctx context.Context, ref string) (domain.Project, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, identifier, name, description, status, logo_gradient, logo_emoji,
+		       logo_gradient_from, logo_gradient_to, logo_gradient_angle,
 		       created_at, updated_at
 		FROM projects
 		WHERE id = ? OR identifier = ?
@@ -76,7 +79,8 @@ func (s *Store) GetProject(ctx context.Context, ref string) (domain.Project, err
 func (s *Store) ListProjects(ctx context.Context, includeArchived bool) ([]domain.ProjectListItem, error) {
 	query := `
 		SELECT p.id, p.identifier, p.name, p.description, p.status, p.logo_gradient,
-		       p.logo_emoji, p.created_at, p.updated_at,
+		       p.logo_emoji, p.logo_gradient_from, p.logo_gradient_to, p.logo_gradient_angle,
+		       p.created_at, p.updated_at,
 		       (SELECT COUNT(*) FROM epics e WHERE e.project_id = p.id),
 		       (SELECT COUNT(*) FROM issues i WHERE i.project_id = p.id),
 		       (SELECT COUNT(*) FROM issues i WHERE i.project_id = p.id AND i.status = 'done')
@@ -106,10 +110,12 @@ func (s *Store) ListProjects(ctx context.Context, includeArchived bool) ([]domai
 func (s *Store) UpdateProject(ctx context.Context, p domain.Project) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE projects
-		SET name = ?, description = ?, status = ?, logo_gradient = ?, logo_emoji = ?, updated_at = ?
+		SET name = ?, description = ?, status = ?, logo_gradient = ?, logo_emoji = ?,
+		    logo_gradient_from = ?, logo_gradient_to = ?, logo_gradient_angle = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		p.Name, p.Description, p.Status, p.LogoGradient, p.LogoEmoji,
+		p.LogoGradientFrom, p.LogoGradientTo, p.LogoGradientAngle,
 		formatTime(p.UpdatedAt), p.ID,
 	)
 	if err != nil {

@@ -19,6 +19,9 @@ import (
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
+var gradientColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+const defaultGradientAngle = 135
 
 type Publisher interface {
 	Publish(event events.Event)
@@ -58,21 +61,27 @@ func (s *Service) Ready(ctx context.Context) error {
 }
 
 type CreateProjectInput struct {
-	Name         string
-	Identifier   string
-	Description  string
-	Status       string
-	LogoGradient *int
-	LogoEmoji    string
+	Name              string
+	Identifier        string
+	Description       string
+	Status            string
+	LogoGradient      *int
+	LogoEmoji         string
+	LogoGradientFrom  string
+	LogoGradientTo    string
+	LogoGradientAngle *int
 }
 
 type UpdateProjectInput struct {
-	Name         *string
-	Identifier   *string
-	Description  *string
-	Status       *string
-	LogoGradient *int
-	LogoEmoji    *string
+	Name              *string
+	Identifier        *string
+	Description       *string
+	Status            *string
+	LogoGradient      *int
+	LogoEmoji         *string
+	LogoGradientFrom  *string
+	LogoGradientTo    *string
+	LogoGradientAngle *int
 }
 
 func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (domain.Project, error) {
@@ -125,16 +134,28 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (dom
 		gradient = *in.LogoGradient
 	}
 
+	angle := defaultGradientAngle
+	if in.LogoGradientAngle != nil {
+		angle = *in.LogoGradientAngle
+	}
+	gradientFrom, gradientTo, gradientAngle, err := normalizeGradient(in.LogoGradientFrom, in.LogoGradientTo, angle)
+	if err != nil {
+		return domain.Project{}, err
+	}
+
 	p := domain.Project{
-		ID:           id,
-		Identifier:   identifier,
-		Name:         strings.TrimSpace(in.Name),
-		Description:  in.Description,
-		Status:       status,
-		LogoGradient: gradient,
-		LogoEmoji:    strings.TrimSpace(in.LogoEmoji),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                id,
+		Identifier:        identifier,
+		Name:              strings.TrimSpace(in.Name),
+		Description:       in.Description,
+		Status:            status,
+		LogoGradient:      gradient,
+		LogoEmoji:         strings.TrimSpace(in.LogoEmoji),
+		LogoGradientFrom:  gradientFrom,
+		LogoGradientTo:    gradientTo,
+		LogoGradientAngle: gradientAngle,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	if err := s.store.CreateProject(ctx, p); err != nil {
 		return domain.Project{}, err
@@ -192,6 +213,32 @@ func (s *Service) UpdateProject(ctx context.Context, ref string, in UpdateProjec
 			return domain.Project{}, err
 		}
 		p.LogoEmoji = strings.TrimSpace(*in.LogoEmoji)
+	}
+	if in.LogoGradientFrom != nil || in.LogoGradientTo != nil {
+		from := p.LogoGradientFrom
+		if in.LogoGradientFrom != nil {
+			from = *in.LogoGradientFrom
+		}
+		to := p.LogoGradientTo
+		if in.LogoGradientTo != nil {
+			to = *in.LogoGradientTo
+		}
+		angle := p.LogoGradientAngle
+		if in.LogoGradientAngle != nil {
+			angle = *in.LogoGradientAngle
+		}
+		from, to, angle, err = normalizeGradient(from, to, angle)
+		if err != nil {
+			return domain.Project{}, err
+		}
+		p.LogoGradientFrom = from
+		p.LogoGradientTo = to
+		p.LogoGradientAngle = angle
+	} else if in.LogoGradientAngle != nil {
+		if err := validGradientAngle(*in.LogoGradientAngle); err != nil {
+			return domain.Project{}, err
+		}
+		p.LogoGradientAngle = *in.LogoGradientAngle
 	}
 
 	p.UpdatedAt = s.now().UTC()
@@ -795,6 +842,37 @@ func gradientFromID(id string) int {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(id))
 	return int(h.Sum32() % 8)
+}
+
+func validGradientAngle(angle int) error {
+	if angle < 0 || angle > 360 {
+		return domain.Invalid("logo_gradient_angle", "must be between 0 and 360")
+	}
+	return nil
+}
+
+func normalizeGradient(from, to string, angle int) (string, string, int, error) {
+	from = strings.ToLower(strings.TrimSpace(from))
+	to = strings.ToLower(strings.TrimSpace(to))
+	if err := validGradientAngle(angle); err != nil {
+		return "", "", 0, err
+	}
+	if from == "" && to == "" {
+		return "", "", defaultGradientAngle, nil
+	}
+	if from == "" {
+		return "", "", 0, domain.Invalid("logo_gradient_from", "both gradient colours are required")
+	}
+	if to == "" {
+		return "", "", 0, domain.Invalid("logo_gradient_to", "both gradient colours are required")
+	}
+	if !gradientColorPattern.MatchString(from) {
+		return "", "", 0, domain.Invalid("logo_gradient_from", "must be a hex colour like #ffa443")
+	}
+	if !gradientColorPattern.MatchString(to) {
+		return "", "", 0, domain.Invalid("logo_gradient_to", "must be a hex colour like #8b5cf6")
+	}
+	return from, to, angle, nil
 }
 
 func validText(field, value string, min, max int) error {

@@ -77,15 +77,18 @@ func (p Priority) Valid() bool {
 }
 
 type Project struct {
-	ID           string        `json:"id"`
-	Identifier   string        `json:"identifier"`
-	Name         string        `json:"name"`
-	Description  string        `json:"description"`
-	Status       ProjectStatus `json:"status"`
-	LogoGradient int           `json:"logo_gradient"`
-	LogoEmoji    string        `json:"logo_emoji"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
+	ID                string        `json:"id"`
+	Identifier        string        `json:"identifier"`
+	Name              string        `json:"name"`
+	Description       string        `json:"description"`
+	Status            ProjectStatus `json:"status"`
+	LogoGradient      int           `json:"logo_gradient"`
+	LogoEmoji         string        `json:"logo_emoji"`
+	LogoGradientFrom  string        `json:"logo_gradient_from"`
+	LogoGradientTo    string        `json:"logo_gradient_to"`
+	LogoGradientAngle int           `json:"logo_gradient_angle"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
 }
 
 type ProjectListItem struct {

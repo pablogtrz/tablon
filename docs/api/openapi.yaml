@@ -124,6 +124,9 @@ paths:
                     status: active
                     logo_gradient: 5
                     logo_emoji: '🧭'
+                    logo_gradient_from: '#ffa443'
+                    logo_gradient_to: '#8b5cf6'
+                    logo_gradient_angle: 135
                     created_at: '2026-11-23T21:30:23.084258Z'
                     updated_at: '2026-11-24T09:08:07.572562Z'
                     epic_count: 5
@@ -1016,7 +1019,9 @@ components:
 
     Project:
       type: object
-      required: [id, identifier, name, description, status, logo_gradient, logo_emoji, created_at, updated_at]
+      required:
+        [id, identifier, name, description, status, logo_gradient, logo_emoji,
+         logo_gradient_from, logo_gradient_to, logo_gradient_angle, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1037,6 +1042,19 @@ components:
           maximum: 7
         logo_emoji:
           type: string
+        logo_gradient_from:
+          type: string
+          description: Hex colour for the start of a custom gradient; empty uses the curated tile.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_to:
+          type: string
+          description: Hex colour for the end of a custom gradient; empty uses the curated tile.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_angle:
+          type: integer
+          minimum: 0
+          maximum: 360
+          default: 135
         created_at:
           type: string
           format: date-time
@@ -1223,6 +1241,19 @@ components:
           maximum: 7
         logo_emoji:
           type: string
+        logo_gradient_from:
+          type: string
+          description: Start colour for a custom two-stop gradient. Send both colours to enable it.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_to:
+          type: string
+          description: End colour for a custom two-stop gradient. Send both colours to enable it.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_angle:
+          type: integer
+          minimum: 0
+          maximum: 360
+          default: 135
 
     UpdateProjectRequest:
       type: object
@@ -1245,6 +1276,18 @@ components:
           maximum: 7
         logo_emoji:
           type: string
+        logo_gradient_from:
+          type: string
+          description: Start colour for a custom two-stop gradient. Send both colours as empty strings to clear it.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_to:
+          type: string
+          description: End colour for a custom two-stop gradient. Send both colours as empty strings to clear it.
+          pattern: '^(#[0-9a-fA-F]{6})?$'
+        logo_gradient_angle:
+          type: integer
+          minimum: 0
+          maximum: 360
 
     CreateEpicRequest:
       type: object

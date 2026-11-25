@@ -68,6 +68,199 @@ func TestCreateProjectDefaultsAndIdentifierCollision(t *testing.T) {
 	}
 }
 
+func TestProjectCustomGradientRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	angle := 45
+
+	p, err := svc.CreateProject(ctx, CreateProjectInput{
+		Name:              "Custom gradient",
+		LogoGradientFrom:  "#FFA443",
+		LogoGradientTo:    "#8B5CF6",
+		LogoGradientAngle: &angle,
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if p.LogoGradientFrom != "#ffa443" || p.LogoGradientTo != "#8b5cf6" || p.LogoGradientAngle != 45 {
+		t.Fatalf("custom gradient = %#v", p)
+	}
+
+	got, err := svc.GetProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if got.LogoGradientFrom != "#ffa443" || got.LogoGradientTo != "#8b5cf6" || got.LogoGradientAngle != 45 {
+		t.Fatalf("stored custom gradient = %#v", got)
+	}
+
+	list, err := svc.ListProjects(ctx, true)
+	if err != nil {
+		t.Fatalf("list projects: %v", err)
+	}
+	found := false
+	for _, item := range list {
+		if item.ID != p.ID {
+			continue
+		}
+		found = true
+		if item.LogoGradientFrom != "#ffa443" || item.LogoGradientTo != "#8b5cf6" || item.LogoGradientAngle != 45 {
+			t.Fatalf("listed custom gradient = %#v", item)
+		}
+	}
+	if !found {
+		t.Fatal("project missing from list")
+	}
+
+	empty := ""
+	cleared, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{
+		LogoGradientFrom: &empty,
+		LogoGradientTo:   &empty,
+	})
+	if err != nil {
+		t.Fatalf("clear custom gradient: %v", err)
+	}
+	if cleared.LogoGradientFrom != "" || cleared.LogoGradientTo != "" || cleared.LogoGradientAngle != 135 {
+		t.Fatalf("custom gradient was not cleared: %#v", cleared)
+	}
+	got, err = svc.GetProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("re-read cleared project: %v", err)
+	}
+	if got.LogoGradientFrom != "" || got.LogoGradientTo != "" || got.LogoGradientAngle != 135 {
+		t.Fatalf("cleared custom gradient = %#v", got)
+	}
+
+	from := "#112233"
+	to := "#445566"
+	nextAngle := 225
+	updated, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{
+		LogoGradientFrom:  &from,
+		LogoGradientTo:    &to,
+		LogoGradientAngle: &nextAngle,
+	})
+	if err != nil {
+		t.Fatalf("update custom gradient: %v", err)
+	}
+	if updated.LogoGradientFrom != from || updated.LogoGradientTo != to || updated.LogoGradientAngle != nextAngle {
+		t.Fatalf("updated custom gradient = %#v", updated)
+	}
+	got, err = svc.GetProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("re-read updated project: %v", err)
+	}
+	if got.LogoGradientFrom != from || got.LogoGradientTo != to || got.LogoGradientAngle != nextAngle {
+		t.Fatalf("persisted custom gradient = %#v", got)
+	}
+
+	partialFrom := "#778899"
+	partial, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{LogoGradientFrom: &partialFrom})
+	if err != nil {
+		t.Fatalf("partial custom gradient update: %v", err)
+	}
+	if partial.LogoGradientFrom != partialFrom || partial.LogoGradientTo != to {
+		t.Fatalf("partial update lost the end colour: %#v", partial)
+	}
+}
+
+func TestProjectCustomGradientValidation(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	p, err := svc.CreateProject(ctx, CreateProjectInput{Name: "Validation"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	empty := ""
+	badAngle := 361
+	tests := []struct {
+		name  string
+		field string
+		run   func() error
+	}{
+		{
+			name:  "create short colour",
+			field: "logo_gradient_from",
+			run: func() error {
+				_, err := svc.CreateProject(ctx, CreateProjectInput{
+					Name:             "Bad colour",
+					LogoGradientFrom: "#fff",
+					LogoGradientTo:   "#000000",
+				})
+				return err
+			},
+		},
+		{
+			name:  "create start only",
+			field: "logo_gradient_to",
+			run: func() error {
+				_, err := svc.CreateProject(ctx, CreateProjectInput{
+					Name:             "Start only",
+					LogoGradientFrom: "#aabbcc",
+				})
+				return err
+			},
+		},
+		{
+			name:  "create end only",
+			field: "logo_gradient_from",
+			run: func() error {
+				_, err := svc.CreateProject(ctx, CreateProjectInput{
+					Name:           "End only",
+					LogoGradientTo: "#aabbcc",
+				})
+				return err
+			},
+		},
+		{
+			name:  "create bad angle",
+			field: "logo_gradient_angle",
+			run: func() error {
+				_, err := svc.CreateProject(ctx, CreateProjectInput{
+					Name:              "Bad angle",
+					LogoGradientFrom:  "#aabbcc",
+					LogoGradientTo:    "#ddeeff",
+					LogoGradientAngle: &badAngle,
+				})
+				return err
+			},
+		},
+		{
+			name:  "update one-sided",
+			field: "logo_gradient_to",
+			run: func() error {
+				from := "#aabbcc"
+				_, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{
+					LogoGradientFrom: &from,
+					LogoGradientTo:   &empty,
+				})
+				return err
+			},
+		},
+		{
+			name:  "update bad angle",
+			field: "logo_gradient_angle",
+			run: func() error {
+				_, err := svc.UpdateProject(ctx, p.ID, UpdateProjectInput{LogoGradientAngle: &badAngle})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.run()
+			ve, ok := domain.AsValidation(err)
+			if !ok {
+				t.Fatalf("error = %v, want validation error", err)
+			}
+			if ve.Field != test.field {
+				t.Fatalf("field = %q, want %q", ve.Field, test.field)
+			}
+		})
+	}
+}
+
 func TestExplicitIdentifierConflict(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

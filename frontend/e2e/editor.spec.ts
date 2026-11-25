@@ -28,7 +28,10 @@ test.describe('unsaved guards', () => {
     const editor = page.locator('[data-testid="markdown-editor"] .cm-content').first()
     await editor.fill('Unsaved description text')
 
-    await page.getByRole('link', { name: project.name }).click()
+    await page
+      .getByRole('region', { name: 'Issue detail' })
+      .getByRole('link', { name: project.name })
+      .click()
     const dialog = page.getByRole('dialog', { name: 'Leave without saving?' })
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Stay' }).click()

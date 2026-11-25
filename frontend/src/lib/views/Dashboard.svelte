@@ -2,11 +2,14 @@
   import { onMount } from 'svelte'
   import Plus from '@lucide/svelte/icons/plus'
   import Button from '$lib/components/tablon/Button.svelte'
+  import EmojiPicker from '$lib/components/tablon/EmojiPicker.svelte'
+  import LogoPicker from '$lib/components/tablon/LogoPicker.svelte'
   import Modal from '$lib/components/tablon/Modal.svelte'
   import ProjectCard from '$lib/components/tablon/ProjectCard.svelte'
   import ProjectLogo from '$lib/components/tablon/ProjectLogo.svelte'
   import { createProject, listProjects } from '$lib/api'
   import { messageOf } from '$lib/errors'
+  import { refreshProjectNav } from '$lib/project-nav.svelte'
   import { navigate, projectPath } from '$lib/router.svelte'
   import { inputClass, labelClass, textareaClass } from '$lib/ui'
   import type { ProjectListItem } from '$lib/types'
@@ -21,6 +24,10 @@
   let identifier = $state('')
   let description = $state('')
   let emoji = $state('')
+  let gradient = $state(0)
+  let gradientFrom = $state('')
+  let gradientTo = $state('')
+  let gradientAngle = $state(135)
   let submitting = $state(false)
   let formError = $state('')
 
@@ -46,6 +53,10 @@
     identifier = ''
     description = ''
     emoji = ''
+    gradient = 0
+    gradientFrom = ''
+    gradientTo = ''
+    gradientAngle = 135
     formError = ''
     createOpen = true
   }
@@ -55,13 +66,23 @@
     submitting = true
     formError = ''
     try {
+      const customGradient = Boolean(gradientFrom && gradientTo)
       const project = await createProject({
         name,
         identifier: identifier.trim() || undefined,
         description,
+        logo_gradient: gradient,
         logo_emoji: emoji.trim() || undefined,
+        ...(customGradient
+          ? {
+              logo_gradient_from: gradientFrom,
+              logo_gradient_to: gradientTo,
+              logo_gradient_angle: gradientAngle,
+            }
+          : {}),
       })
       createOpen = false
+      void refreshProjectNav()
       navigate(projectPath(project.identifier))
     } catch (err) {
       formError = messageOf(err)
@@ -105,7 +126,7 @@
 {#if loading}
   <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
     {#each Array(3) as _}
-      <div class="glass min-h-[188px] animate-pulse rounded-2xl p-4 motion-reduce:animate-none">
+      <div class="glass min-h-[208px] animate-pulse rounded-2xl p-5 motion-reduce:animate-none">
         <div class="flex gap-3">
           <div class="size-10 rounded-[10px] bg-white/[.06]"></div>
           <div class="flex-1 space-y-2 py-1">
@@ -113,7 +134,7 @@
             <div class="h-2.5 w-1/3 rounded bg-white/[.04]"></div>
           </div>
         </div>
-        <div class="mt-5 h-2.5 w-full rounded bg-white/[.04]"></div>
+        <div class="mt-6 h-2.5 w-full rounded bg-white/[.04]"></div>
         <div class="mt-2 h-2.5 w-4/5 rounded bg-white/[.04]"></div>
       </div>
     {/each}
@@ -151,12 +172,28 @@
 >
   <form id="create-project" class="space-y-4" onsubmit={(event) => { event.preventDefault(); void submitCreate() }}>
     <div class="flex items-center gap-3 rounded-xl border border-border bg-[var(--surface-1)] p-3">
-      <ProjectLogo gradient={0} emoji={emoji} name={name || 'Project'} size="md" />
+      <ProjectLogo
+        gradient={gradient}
+        from={gradientFrom}
+        to={gradientTo}
+        angle={gradientAngle}
+        emoji={emoji}
+        name={name || 'Project'}
+        size="md"
+      />
       <div>
         <p class="text-sm font-medium">Project identity</p>
-        <p class="mt-0.5 text-xs text-[var(--text-3)]">A gradient is chosen automatically. Add an emoji to override it.</p>
+        <p class="mt-0.5 text-xs text-[var(--text-3)]">Pick a colour tile and add an emoji for extra character.</p>
       </div>
     </div>
+
+    <LogoPicker
+      bind:value={gradient}
+      bind:from={gradientFrom}
+      bind:to={gradientTo}
+      bind:angle={gradientAngle}
+      name="create-project-colour"
+    />
 
     <div>
       <label class={labelClass} for="project-name">Name</label>
@@ -174,10 +211,7 @@
       <textarea id="project-description" class={textareaClass} bind:value={description} rows="3" placeholder="What is this project about?"></textarea>
     </div>
 
-    <div>
-      <label class={labelClass} for="project-emoji">Emoji <span class="font-normal text-[var(--text-3)]">(optional)</span></label>
-      <input id="project-emoji" class={inputClass} bind:value={emoji} maxlength="16" placeholder="🚀" autocomplete="off" />
-    </div>
+    <EmojiPicker bind:value={emoji} />
 
     {#if formError}
       <p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{formError}</p>
