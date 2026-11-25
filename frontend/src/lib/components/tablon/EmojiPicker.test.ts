@@ -21,6 +21,13 @@ function setInput(input: HTMLInputElement, value: string) {
   flushSync()
 }
 
+function recentSection() {
+  const heading = [...document.querySelectorAll('h3')].find(
+    (node) => node.textContent?.trim() === 'Recent',
+  )
+  return heading?.parentElement ?? null
+}
+
 describe('EmojiPicker', () => {
   it('selects an emoji from the grid and records it as recent', () => {
     app = mount(EmojiPicker, { target: document.body, props: { value: '' } })
@@ -35,7 +42,7 @@ describe('EmojiPicker', () => {
 
     expect(trigger()?.textContent).toContain('🚀')
     expect(trigger()?.textContent).toContain('Change emoji')
-    expect(document.body.textContent).toContain('Recent')
+    expect(recentSection()?.querySelector('button[aria-label="Rocket"]')).not.toBeNull()
   })
 
   it('supports a custom emoji through the footer input', () => {
@@ -62,6 +69,8 @@ describe('EmojiPicker', () => {
     flushSync()
 
     expect(trigger()?.textContent).toContain('🧪')
+    const recentButtons = [...(recentSection()?.querySelectorAll('button') ?? [])]
+    expect(recentButtons.some((button) => button.textContent?.trim() === '🧪')).toBe(true)
   })
 
   it('filters the grid with search', () => {

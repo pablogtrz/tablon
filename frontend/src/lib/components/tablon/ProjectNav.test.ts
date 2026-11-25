@@ -43,6 +43,11 @@ function toggle() {
   return document.querySelector<HTMLButtonElement>('button[aria-controls]')
 }
 
+function list() {
+  const id = toggle()?.getAttribute('aria-controls')
+  return id ? document.getElementById(id) : null
+}
+
 describe('ProjectNav', () => {
   it('opens on project routes and marks the current project', () => {
     route.path = '/projects/TABLON'
@@ -53,12 +58,12 @@ describe('ProjectNav', () => {
     expect(document.querySelector('a[aria-current="page"]')?.textContent).toContain('Tablon')
   })
 
-  it('collapses on settings routes', () => {
+  it('starts collapsed on settings routes', () => {
     route.path = '/settings'
     app = mount(ProjectNav, { target: document.body })
 
     expect(toggle()?.getAttribute('aria-expanded')).toBe('false')
-    expect(document.querySelector('a[aria-current="page"]')).toBeNull()
+    expect(list()?.hidden).toBe(true)
   })
 
   it('collapses when the route leaves Projects and reopens on return', () => {
@@ -69,10 +74,12 @@ describe('ProjectNav', () => {
     route.path = '/settings'
     flushSync()
     expect(toggle()?.getAttribute('aria-expanded')).toBe('false')
+    expect(list()?.hidden).toBe(true)
 
     route.path = '/projects/TABLON'
     flushSync()
     expect(toggle()?.getAttribute('aria-expanded')).toBe('true')
+    expect(list()?.hidden).toBe(false)
   })
 
   it('toggles from the chevron', () => {
@@ -82,6 +89,6 @@ describe('ProjectNav', () => {
     toggle()?.click()
     flushSync()
     expect(toggle()?.getAttribute('aria-expanded')).toBe('false')
-    expect(document.querySelector('a[href="/projects/TABLON"]')).toBeNull()
+    expect(list()?.hidden).toBe(true)
   })
 })

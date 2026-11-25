@@ -23,6 +23,11 @@ function counts(overrides: Partial<Record<IssueStatus, number>> = {}): Record<Is
   }
 }
 
+function countFor(label: string): string | null {
+  const term = [...document.querySelectorAll('dt')].find((node) => node.textContent?.trim() === label)
+  return term?.parentElement?.querySelector('dd')?.textContent?.trim() ?? null
+}
+
 describe('IssueStatusCounts', () => {
   it('renders a number-first stack for every present status', () => {
     app = mount(IssueStatusCounts, {
@@ -30,14 +35,11 @@ describe('IssueStatusCounts', () => {
       props: { counts: counts({ todo: 2, 'in-review': 3, done: 1 }) },
     })
 
-    expect(document.body.textContent).toContain('Todo')
-    expect(document.body.textContent).toContain('2')
-    expect(document.body.textContent).toContain('In Review')
-    expect(document.body.textContent).toContain('3')
-    expect(document.body.textContent).toContain('Done')
-    expect(document.body.textContent).toContain('1')
-    expect(document.body.textContent).not.toContain('Backlog')
-    expect(document.body.textContent).not.toContain('Canceled')
+    expect(countFor('Todo')).toBe('2')
+    expect(countFor('In Review')).toBe('3')
+    expect(countFor('Done')).toBe('1')
+    expect(countFor('Backlog')).toBeNull()
+    expect(countFor('Canceled')).toBeNull()
     expect(document.querySelector('dl')?.getAttribute('aria-label')).toContain('2 Todo')
   })
 
@@ -50,5 +52,15 @@ describe('IssueStatusCounts', () => {
     expect(document.body.textContent).toContain('Tasks by status')
     expect(document.body.textContent).toContain('0 tasks')
     expect(document.body.textContent).toContain('No tasks yet')
+  })
+
+  it('uses the singular task label for one task', () => {
+    app = mount(IssueStatusCounts, {
+      target: document.body,
+      props: { counts: counts({ todo: 1 }), label: 'Tasks by status' },
+    })
+
+    expect(document.body.textContent).toContain('1 task')
+    expect(document.body.textContent).not.toContain('1 tasks')
   })
 })
